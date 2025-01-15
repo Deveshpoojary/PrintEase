@@ -3,8 +3,8 @@ import React from "react";
 const Services = () => {
   const services = [
     { name: "Document Printing", description: "Upload your files and get them printed quickly." },
-    { name: "ID Card Laminations", description: "Professional lamination services." },
-    { name: "Binding", description: "Spiral and perfect binding for your documents." },
+    { name: "Slot Booking", description: "Reserve a time slot for seamless service." },
+    { name: "Track Order", description: "Monitor the progress of your order in real-time." },
   ];
 
   return (

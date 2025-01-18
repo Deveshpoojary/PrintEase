@@ -6,8 +6,12 @@ const UploadAndPrint = () => {
     color: "color",
     sides: "single",
     copies: 1,
-    pages: "",
+    pages: "all", // Default to "all" for printing all pages
+    specificPages: "", // Holds specific page ranges if entered
+    comments: "",
   });
+
+  const [isSpecificPagesInputVisible, setSpecificPagesInputVisible] = useState(false);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -15,6 +19,21 @@ const UploadAndPrint = () => {
 
   const handlePrintOptionsChange = (e) => {
     setPrintOptions({ ...printOptions, [e.target.name]: e.target.value });
+  };
+
+  const handlePageSelection = (e) => {
+    const value = e.target.value;
+    if (value === "all") {
+      setSpecificPagesInputVisible(false);
+      setPrintOptions({ ...printOptions, pages: "all", specificPages: "" });
+    } else {
+      setSpecificPagesInputVisible(true);
+      setPrintOptions({ ...printOptions, pages: "" }); // Clear "pages" when specific is selected
+    }
+  };
+
+  const handleSpecificPagesChange = (e) => {
+    setPrintOptions({ ...printOptions, specificPages: e.target.value });
   };
 
   return (
@@ -27,6 +46,7 @@ const UploadAndPrint = () => {
             type="file"
             onChange={handleFileChange}
             className="border p-2 w-full"
+            multiple
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -68,18 +88,46 @@ const UploadAndPrint = () => {
             />
           </div>
           <div>
-            <label className="block mb-2 font-bold">Specific Pages</label>
+            <label className="block mb-2 font-bold">Pages</label>
+            <select
+              name="pages"
+              value={isSpecificPagesInputVisible ? "specific" : "all"}
+              onChange={handlePageSelection}
+              className="border p-2 w-full"
+            >
+              <option value="all">All Pages</option>
+              <option value="specific">Specific Pages</option>
+            </select>
+          </div>
+        </div>
+        {isSpecificPagesInputVisible && (
+          <div className="mt-4">
+            <label className="block mb-2 font-bold">Enter Specific Pages</label>
             <input
               type="text"
-              name="pages"
+              name="specificPages"
               placeholder="e.g., 1-5, 7, 9-12"
-              value={printOptions.pages}
-              onChange={handlePrintOptionsChange}
+              value={printOptions.specificPages}
+              onChange={handleSpecificPagesChange}
               className="border p-2 w-full"
             />
           </div>
+        )}
+        <div className="mt-4">
+          <label className="block mb-2 font-bold">Additional Comments (Optional)</label>
+          <textarea
+            name="comments"
+            value={printOptions.comments}
+            onChange={handlePrintOptionsChange}
+            className="border p-2 w-full"
+            rows="3"
+            placeholder="Add any additional instructions or comments here."
+          />
         </div>
-        <button className="bg-green-600 text-white py-2 px-4 rounded mt-6 hover:bg-green-700">
+        <button
+          className="bg-green-600 text-white py-2 px-4 rounded mt-6 hover:bg-green-700"
+          onClick={() => console.log(printOptions)}
+        >
           Submit Print Request
         </button>
       </div>

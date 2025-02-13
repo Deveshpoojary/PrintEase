@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import UploadAndPrint from "./UploadAndPrint";
 import BookSlot from "./BookSlot";
@@ -20,6 +20,13 @@ const Dashboard = () => {
         return null;
     }
   };
+
+  // This will prevent access without login.
+  useEffect(()=>{
+    if (!localStorage.getItem("USN")) {
+      navigate("/login");
+    }
+  })
 
   return (
     <div className="min-h-screen bg-gray-100">

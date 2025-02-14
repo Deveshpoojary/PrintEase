@@ -4,7 +4,6 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Main from "./components/Main";
 import Dashboard from "./pages/Dashboard";
 import NotFoundPage from './components/NotFounPage';
-import AdminDashboard from './admin/AdminDashboard';
 
 function App() {
   return (
@@ -16,6 +15,9 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="*" element={<NotFoundPage/>}/>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path='/login' element={<LoginPage/>}/>
+        <Route path='/sign-up' element={<SignUpPage/>}/>
+
       </Routes>
     </BrowserRouter>
     </>

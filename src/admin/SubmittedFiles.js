@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+// import axios from "axios";
 
 const SubmittedFiles = () => {
   const [requests, setRequests] = useState([]);
 
-  useEffect(() => {
-    axios.get("http://localhost:5000/submitted-requests")
-      .then((response) => setRequests(response.data))
-      .catch((error) => console.error("Error fetching requests", error));
-  }, []);
+  // useEffect(() => {
+  //   axios.get("http://localhost:5000/submitted-requests")
+  //     .then((response) => setRequests(response.data))
+  //     .catch((error) => console.error("Error fetching requests", error));
+  // }, []);
 
   return (
     <div className="bg-white shadow-md p-6 rounded-lg">

@@ -27,6 +27,10 @@ const Dashboard = () => {
       navigate("/login");
     }
   })
+  const removeAccount=()=>{
+    localStorage.removeItem("USN");
+    navigate("/login");
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -65,7 +69,7 @@ const Dashboard = () => {
           </button>
           <button
             className="bg-red-500 px-4 py-2 rounded hover:bg-red-700"
-            onClick={() => navigate("/")}
+            onClick={removeAccount}
           >
             Logout
           </button>

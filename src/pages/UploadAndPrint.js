@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+// import axios from "axios";
 
 const UploadAndPrint = () => {
   const [file, setFile] = useState(null);
@@ -35,14 +35,14 @@ const UploadAndPrint = () => {
       printOptions
     };
   
-    try {
-      const response = await axios.post("http://localhost:5000/submit-print-request", data);
-      setMessage(response.data.message);
-      setFile(null);
-    } catch (error) {
-      console.error("Error submitting print request", error);
-      setMessage("Error submitting request");
-    }
+    // try {
+    //   const response = await axios.post("http://localhost:5000/submit-print-request", data);
+    //   setMessage(response.data.message);
+    //   setFile(null);
+    // } catch (error) {
+    //   console.error("Error submitting print request", error);
+    //   setMessage("Error submitting request");
+    // }
   };
   
 

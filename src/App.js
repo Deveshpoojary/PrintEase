@@ -7,6 +7,7 @@ import AdminDashboard from './admin/AdminDashboard';
 import LoginPage from './pages/Login';
 import SignUpPage from './pages/Signup';
 import NotFoundPage from './components/NotFoundPage';
+import ViewPDF from './pages/ViewPdf';
 
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="*" element={<NotFoundPage/>}/>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/viewpdf" element={<ViewPDF />} />
         <Route path='/login' element={<LoginPage/>}/>
         <Route path='/sign-up' element={<SignUpPage/>}/>
 

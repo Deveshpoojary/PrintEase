@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@clerk/clerk-react": "^5.31.9",
+    "@deveshgp/deui-library": "^1.0.21",
+    "@deveshgp/ui-library": "^1.0.0",
+    "@material/button": "^14.0.0",
     "autoprefixer": "^10.4.20",
     "axios": "^1.7.9",
     "cors": "^2.8.5",

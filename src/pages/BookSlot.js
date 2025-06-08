@@ -1,166 +1,191 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
+import { Calendar, Clock, User } from 'lucide-react';
 
 const BookSlot = () => {
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTime, setSelectedTime] = useState("");
-  const [userName, setUserName] = useState("");
-  const [usn, setUsn] = useState("");
-  const [availableSlots, setAvailableSlots] = useState([
-    "9:00 AM",
-    "10:00 AM",
-    "11:00 AM",
-    "12:00 PM",
-    "1:00 PM",
-    "2:00 PM",
-  ]);
-  const [bookedSlots, setBookedSlots] = useState([]);
-  const [confirmationMessage, setConfirmationMessage] = useState("");
-  const [showBookings, setShowBookings] = useState(false);
+  const [booking, setBooking] = useState({
+    date: '',
+    time: '',
+    name: '',
+    usn: '',
+    email: '',
+    phone: '',
+    notes: ''
+  });
 
-  const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
-    setSelectedTime("");
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const timeSlots = [
+    '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+    '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
+  ];
+
+  const handleInputChange = (e) => {
+    setBooking({ ...booking, [e.target.name]: e.target.value });
   };
 
-  const handleTimeChange = (e) => {
-    setSelectedTime(e.target.value);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setIsSubmitted(true);
+    setTimeout(() => setIsSubmitted(false), 3000);
   };
 
-  const handleBooking = () => {
-    if (!selectedDate || !selectedTime || !userName || !usn) {
-      alert("Please fill out all fields.");
-      return;
-    }
-
-    if (bookedSlots.some((slot) => slot.date === selectedDate && slot.time === selectedTime)) {
-      alert("This slot is already booked. Please choose another.");
-      return;
-    }
-
-    const newBooking = {
-      date: selectedDate,
-      time: selectedTime,
-      name: userName,
-      usn,
-    };
-
-    setBookedSlots([...bookedSlots, newBooking]);
-    setConfirmationMessage(
-      `Booking confirmed for ${selectedDate} at ${selectedTime} for ${userName} (USN: ${usn}).`
-    );
-
-    setSelectedDate("");
-    setSelectedTime("");
-    setUserName("");
-    setUsn("");
-  };
-
-  const handleDeleteBooking = (index) => {
-    const updatedBookings = bookedSlots.filter((_, i) => i !== index);
-    setBookedSlots(updatedBookings);
-  };
-
-  const availableTimes = availableSlots.filter(
-    (slot) => !bookedSlots.some((booked) => booked.date === selectedDate && booked.time === slot)
-  );
+  const isFormValid = booking.date && booking.time && booking.name && booking.email && booking.usn;
 
   return (
-    <div className="container mx-auto p-6 relative">
-      <div className="absolute top-4 right-4">
-        <button
-          onClick={() => setShowBookings(!showBookings)}
-          className="bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700"
-        >
-          {showBookings ? "Hide My Bookings" : "My Bookings"}
-        </button>
+    <div className="space-y-8">
+      <div className="text-center space-y-4">
+        <h2 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          Book Printing Slot
+        </h2>
+        <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+          Reserve your printing time slot to ensure quick and hassle-free service
+        </p>
       </div>
-      <h2 className="text-3xl font-bold mb-6 text-center">Book Slot</h2>
-      <div className="bg-white p-6 rounded-lg shadow-lg max-w-md mx-auto">
-        <div className="mb-4">
-          <label className="block mb-2 font-bold">Select Date</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={handleDateChange}
-            className="border p-2 w-full rounded"
-            min={new Date().toISOString().split("T")[0]}
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2 font-bold">Select Time</label>
-          <select
-            value={selectedTime}
-            onChange={handleTimeChange}
-            className="border p-2 w-full rounded"
-            disabled={!selectedDate}
-          >
-            <option value="">Select a time</option>
-            {availableTimes.map((time) => (
-              <option key={time} value={time}>
-                {time}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2 font-bold">Your Name</label>
-          <input
-            type="text"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            className="border p-2 w-full rounded"
-            placeholder="Enter your name"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2 font-bold">Your USN</label>
-          <input
-            type="text"
-            value={usn}
-            onChange={(e) => setUsn(e.target.value)}
-            className="border p-2 w-full rounded"
-            placeholder="Enter your USN number"
-          />
-        </div>
-        <button
-          onClick={handleBooking}
-          className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 w-full"
-        >
-          Confirm Booking
-        </button>
-        {confirmationMessage && (
-          <p className="mt-4 text-green-600 font-bold text-center">{confirmationMessage}</p>
-        )}
-      </div>
-      {showBookings && (
-        <div className="fixed right-0 w-80 bg-white p-6 shadow-lg overflow-auto transition-transform transform translate-x-0"
-             style={{ top: "5rem", height: "calc(100% - 4rem)" }}>
-          <button
-            onClick={() => setShowBookings(false)}
-            className="absolute top-2 right-2 bg-gray-500 text-white px-3 py-1 rounded"
-          >
-            Close
-          </button>
-          <h3 className="text-xl font-bold mb-4">My Bookings</h3>
-          {bookedSlots.length > 0 ? (
-            <ul>
-              {bookedSlots.map((booking, index) => (
-                <li key={index} className="border-b p-2 flex justify-between items-center">
-                  <span>{booking.name} (USN: {booking.usn}) - {booking.date} at {booking.time}</span>
+
+      <div className="bg-white/80 backdrop-blur-lg rounded-3xl p-8 border border-white/40 shadow-xl">
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Date & Time */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl shadow-lg">
+                  <Calendar className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800">Select Date</h3>
+              </div>
+              <input
+                type="date"
+                name="date"
+                value={booking.date}
+                onChange={handleInputChange}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                required
+              />
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-lg">
+                  <Clock className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800">Select Time</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {timeSlots.map((slot) => (
                   <button
-                    onClick={() => handleDeleteBooking(index)}
-                    className="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                    key={slot}
+                    type="button"
+                    onClick={() => setBooking({ ...booking, time: slot })}
+                    className={`px-4 py-3 rounded-xl font-medium ${
+                      booking.time === slot
+                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg'
+                        : 'bg-white/60 text-gray-700 hover:bg-white/80 hover:text-gray-800 border border-gray-200'
+                    }`}
                   >
-                    Cancel
+                    {slot}
                   </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-600">No bookings available.</p>
-          )}
-        </div>
-      )}
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Contact Info */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl shadow-lg">
+                <User className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-800">Contact Information</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <label className="block text-gray-700 font-medium">Full Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={booking.name}
+                  onChange={handleInputChange}
+                  className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Enter your full name"
+                  required
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-gray-700 font-medium">USN *</label>
+                <input
+                  type="text"
+                  name="usn"
+                  value={booking.usn}
+                  onChange={handleInputChange}
+                  className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Enter your USN"
+                  required
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-gray-700 font-medium">Email Address *</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={booking.email}
+                  onChange={handleInputChange}
+                  className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-gray-700 font-medium">Phone Number *</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={booking.phone}
+                  onChange={handleInputChange}
+                  className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Enter your phone number"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-4">
+            <label className="block text-gray-700 font-medium">Additional Notes (Optional)</label>
+            <textarea
+              name="notes"
+              value={booking.notes}
+              onChange={handleInputChange}
+              rows={4}
+              className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 resize-none"
+              placeholder="Any special requirements or notes..."
+            />
+          </div>
+
+          {/* Submit */}
+          <div className="flex flex-col items-center space-y-4">
+            <button
+              type="submit"
+              disabled={!isFormValid}
+              className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-2xl shadow-lg hover:from-indigo-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
+            >
+              <Calendar className="w-5 h-5" />
+              Book Printing Slot
+            </button>
+
+            {isSubmitted && (
+              <div className="px-6 py-3 bg-green-100 text-green-700 border border-green-200 rounded-xl font-medium">
+                Slot booked successfully! You'll receive a confirmation email shortly.
+              </div>
+            )}
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

@@ -4,10 +4,12 @@ import Hero from "./Hero";
 import Services from "./Services";
 import Footer from "./Footer";
 
+
+
 export default function Main() {
   return (
     <div className="bg-gray-100 min-h-screen">
-      <Navbar />
+      <Navbar /> 
       <Hero />
       <Services />
       <Footer />

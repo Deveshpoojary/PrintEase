@@ -15,9 +15,9 @@ import {
 // Import your components/pages
 import Main from "./components/Main";
 import Dashboard from "./pages/Dashboard";
-import AdminDashboard from './admin/AdminDashboard';
 import NotFoundPage from './components/NotFoundPage';
 import ViewDocs from './pages/ViewDocs';
+import AdminPanel from './admin/AdminPanel';
 
 // Your Clerk publishable key
 const PUBLISHABLE_KEY = "pk_test_aGFwcHktbWFydGVuLTI3LmNsZXJrLmFjY291bnRzLmRldiQ"; // Replace this with your actual Clerk publishable key
@@ -44,7 +44,7 @@ function App() {
             path="/admin"
             element={
               <RequireAuth>
-                <AdminDashboard />
+                <AdminPanel />
               </RequireAuth>
             }
           />

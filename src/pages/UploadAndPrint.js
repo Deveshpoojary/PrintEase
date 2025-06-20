@@ -1,11 +1,16 @@
 import React, { useState, useRef } from "react";
 import { Upload, FileText, Settings, Send, X, Check } from "lucide-react";
+import { useUser } from "@clerk/clerk-react";
+// import supabase from "../supabase"; // Adjust the import path as necessary
 
 const UploadAndPrint = () => {
   const [files, setFiles] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const [totalPages, setTotalPages] = useState(null);
+const [totalPrice, setTotalPrice] = useState(null);
+
 
   const [printOptions, setPrintOptions] = useState({
     color: "color",
@@ -60,15 +65,66 @@ const UploadAndPrint = () => {
     });
   };
 
-  const handleSubmit = () => {
-    if (files.length === 0) {
-      setMessage("Please upload at least one file.");
-      return;
+  const { user } = useUser();
+
+const handleSubmit = async () => {
+  if (!files.length) {
+    setMessage("Please upload at least one file.");
+    console.warn("No files selected.");
+    return;
+  }
+
+  if (!user) {
+    setMessage("You must be signed in to submit.");
+    console.warn("User not signed in.");
+    return;
+  }
+
+  setMessage("Uploading...");
+  console.log("Starting file upload...");
+
+  try {
+    const formData = new FormData();
+
+    files.forEach((file, index) => {
+      console.log(`Appending file ${index + 1}: ${file.name}`);
+      formData.append("files", file);
+    });
+
+    const email = user.primaryEmailAddress.emailAddress;
+    console.log("User email:", email);
+    formData.append("email", email);
+
+    console.log("Print options:", printOptions);
+    formData.append("printOptions", JSON.stringify(printOptions));
+
+    const res = await fetch("http://localhost:5000/api/print-request", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const { error } = await res.json();
+      console.error("Server responded with error:", error);
+      throw new Error(error || "Print request failed");
     }
 
-    setMessage("Print request submitted successfully!");
-    setTimeout(() => setMessage(""), 3000);
-  };
+    const result = await res.json();
+console.log("Server response:", result);
+setTotalPages(result.totalPages);
+setTotalPrice(result.totalPrice);
+setMessage(
+  `Print request submitted successfully! Total pages: ${result.totalPages}, Total price: ₹${result.totalPrice}`
+);
+setFiles([]);
+  } catch (err) {
+    console.error("Error during handleSubmit:", err);
+    setMessage(`Error: ${err.message}`);
+  } finally {
+    console.log("Upload process completed.");
+    setTimeout(() => setMessage(""), 5000);
+  }
+};
 
   const removeFile = (indexToRemove) => {
     setFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
@@ -245,6 +301,12 @@ const UploadAndPrint = () => {
             className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 resize-none"
           />
         </div>
+        {totalPages !== null && totalPrice !== null && (
+  <p className="text-green-700 bg-green-100 border border-green-300 rounded-xl px-4 py-2 text-center font-medium mt-4">
+    
+    <span>Total pages:</span> {totalPages}, <span>Total price:</span> ₹{totalPrice}
+  </p>
+)}
 
         <div className="mt-8 flex flex-col items-center space-y-4">
           <button

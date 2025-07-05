@@ -16,31 +16,32 @@ const PrintRequests = () => {
         console.error('Error fetching print requests:', error);
       }
     };
-
     fetchPrintRequests();
   }, []);
 
-  const openPrintView = (fileUrl) => {
-    const fullUrl = SUPABASE_PUBLIC_URL + fileUrl;
-    const viewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fullUrl)}&embedded=true`;
-    console.log(viewerUrl);
+  const parseFileUrls = (file_url) => {
+    try {
+      if (typeof file_url === 'string') {
+        const parsed = JSON.parse(file_url);
+        if (Array.isArray(parsed)) return parsed;
+        return Object.values(parsed);
+      } else if (Array.isArray(file_url)) {
+        return file_url;
+      } else {
+        return [file_url];
+      }
+    } catch {
+      return file_url?.split(',') || [];
+    }
+  };
 
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Print File</title>
-          <style>
-            body, html { margin: 0; height: 100%; }
-            iframe { width: 100%; height: 100%; border: none; }
-          </style>
-        </head>
-        <body onload="setTimeout(() => window.print(), 1000)">
-          <iframe src="${viewerUrl}"></iframe>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+  const isImage = (filename) =>
+    /\.(jpe?g|png|gif|webp|bmp)$/i.test(filename.toLowerCase());
+
+  const isPdf = (filename) => /\.pdf$/i.test(filename.toLowerCase());
+
+  const getFullUrl = (url) => {
+    return url.startsWith("http") ? url : SUPABASE_PUBLIC_URL + url.trim();
   };
 
   return (
@@ -56,11 +57,19 @@ const PrintRequests = () => {
             onClick={() => setSelectedRequest(req)}
             className="cursor-pointer bg-gradient-to-br from-white/80 to-purple-50 p-6 rounded-2xl shadow-xl border border-indigo-100 hover:scale-[1.01] transition-transform"
           >
-            <p className="text-sm text-gray-500">{new Date(req.created_at).toLocaleString()}</p>
+            <p className="text-sm text-gray-500">
+              {new Date(req.created_at).toLocaleString()}
+            </p>
             <p className="font-semibold text-lg text-indigo-700">{req.email}</p>
-            <p className="text-sm mt-2">Pages: {req.pages} | Copies: {req.copies}</p>
-            <p className="text-sm">Color: <span className="capitalize">{req.color}</span></p>
-            <p className="text-sm">Sides: <span className="capitalize">{req.sides}</span></p>
+            <p className="text-sm mt-2">
+              Pages: {req.pages} | Copies: {req.copies}
+            </p>
+            <p className="text-sm">
+              Color: <span className="capitalize">{req.color}</span>
+            </p>
+            <p className="text-sm">
+              Sides: <span className="capitalize">{req.sides}</span>
+            </p>
             <p className="text-xs mt-1 italic text-purple-500">Click to view more</p>
           </div>
         ))}
@@ -83,30 +92,48 @@ const PrintRequests = () => {
               <p><strong>Copies:</strong> {selectedRequest.copies}</p>
               <p><strong>Color:</strong> {selectedRequest.color}</p>
               <p><strong>Sides:</strong> {selectedRequest.sides}</p>
-              {selectedRequest.specific_pages && <p><strong>Specific Pages:</strong> {selectedRequest.specific_pages}</p>}
-              {selectedRequest.comments && <p><strong>Comments:</strong> {selectedRequest.comments}</p>}
+              {selectedRequest.specific_pages && (
+                <p><strong>Specific Pages:</strong> {selectedRequest.specific_pages}</p>
+              )}
+              {selectedRequest.comments && (
+                <p><strong>Comments:</strong> {selectedRequest.comments}</p>
+              )}
               <p><strong>Date:</strong> {new Date(selectedRequest.created_at).toLocaleString()}</p>
             </div>
 
-            <div className="mt-4">
-              <h3 className="text-lg font-semibold mb-2 text-indigo-600">File Preview:</h3>
-
-              {selectedRequest.file_url && (
-                <iframe
-                  title="Google Docs Viewer"
-                  src={`https://docs.google.com/gview?url=${encodeURIComponent(
-                    SUPABASE_PUBLIC_URL + selectedRequest.file_url
-                  )}&embedded=true`}
-                  className="w-full h-80 rounded-xl border"
-                ></iframe>
-              )}
-
-              <button
-                onClick={() => openPrintView(selectedRequest.file_url)}
-                className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                Print File
-              </button>
+            <h3 className="mt-6 mb-2 text-lg font-semibold text-indigo-600">Files:</h3>
+            <div className="space-y-6">
+              {parseFileUrls(selectedRequest.file_url).map((file, index) => {
+                const fullUrl = getFullUrl(file);
+                const fileName = fullUrl.split("/").pop();
+                return (
+                  <div key={index} className="border rounded-xl overflow-hidden bg-gray-50">
+                    <div className="bg-gray-100 px-4 py-2 font-medium text-sm text-gray-800">
+                      {fileName}
+                    </div>
+                    {isImage(fullUrl) ? (
+                      <img
+                        src={fullUrl}
+                        alt={`File ${index}`}
+                        className="w-full max-h-[500px] object-contain"
+                      />
+                    ) : isPdf(fullUrl) ? (
+                      <iframe
+                        title={`file-preview-${index}`}
+                        src={`https://docs.google.com/viewerng/viewer?url=${encodeURIComponent(
+                          fullUrl
+                        )}&embedded=true`}
+                        className="w-full h-96"
+                        frameBorder="0"
+                      />
+                    ) : (
+                      <div className="p-4 text-sm text-red-500">
+                        Unsupported file format
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -1,16 +1,20 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Upload, FileText, Settings, Send, X, Check } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 // import supabase from "../supabase"; // Adjust the import path as necessary
+import * as pdfjsLib from "pdfjs-dist";
+import workerSrc from "pdfjs-dist/build/pdf.worker.entry";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 const UploadAndPrint = () => {
   const [files, setFiles] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
-  const [totalPages, setTotalPages] = useState(null);
-const [totalPrice, setTotalPrice] = useState(null);
-
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalPrice, setTotalPrice] = useState(0);
+  const [priceCalculated, setPriceCalculated] = useState(false);
 
   const [printOptions, setPrintOptions] = useState({
     color: "color",
@@ -21,16 +25,71 @@ const [totalPrice, setTotalPrice] = useState(null);
     comments: "",
   });
 
-  const [isSpecificPagesInputVisible, setSpecificPagesInputVisible] = useState(false);
+  const [isSpecificPagesInputVisible, setSpecificPagesInputVisible] =
+    useState(false);
   const [message, setMessage] = useState("");
 
-  const handleFilesChange = (selectedFiles) => {
+  const handleFilesChange = async (selectedFiles) => {
     const fileArray = Array.from(selectedFiles);
     setIsUploading(true);
-    setTimeout(() => {
-      setFiles((prev) => [...prev, ...fileArray]);
-      setIsUploading(false);
-    }, 1000);
+
+    let newPages = 0;
+    const validFiles = [];
+
+    for (const file of fileArray) {
+      const type = file.type;
+      const name = file.name.toLowerCase();
+
+      if (type === "application/pdf") {
+        // ✅ Count PDF pages
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        newPages += pdf.numPages;
+        validFiles.push(file);
+      } else if (type.startsWith("image/")) {
+        /*name.endsWith(".docx") || name.endsWith(".pptx") || */
+        // ✅ Accept DOCX, PPTX, images
+        newPages += 1; // assume 1 page for now, actual count will be calculated in backend
+        validFiles.push(file);
+      } else {
+        alert(`Unsupported file type: ${file.name}`);
+        console.warn(`Skipping unsupported file: ${file.name}`);
+      }
+    }
+
+    // Update files list
+    const updatedFiles = [...files, ...validFiles];
+    setFiles(updatedFiles);
+
+    // Update total pages
+    const updatedTotalPages = totalPages + newPages;
+    setTotalPages(updatedTotalPages);
+
+    // Fetch price
+    const { color, sides, copies } = printOptions;
+    const query = new URLSearchParams({
+      color,
+      sides,
+      copies,
+      pages: updatedTotalPages,
+    });
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/price-estimate?${query}`
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setTotalPrice(data.totalPrice);
+        setPriceCalculated(true);
+      } else {
+        console.error("Price fetch error:", data.error);
+      }
+    } catch (err) {
+      console.error("Fetch failed:", err);
+    }
+
+    setIsUploading(false);
   };
 
   const handleDrop = (e) => {
@@ -52,7 +111,51 @@ const [totalPrice, setTotalPrice] = useState(null);
   };
 
   const handlePrintOptionsChange = (e) => {
-    setPrintOptions({ ...printOptions, [e.target.name]: e.target.value });
+    function parsePageRange(rangeStr) {
+      const pages = new Set();
+      const parts = rangeStr.split(",");
+
+      for (let part of parts) {
+        part = part.trim();
+        if (part.includes("-")) {
+          const [start, end] = part.split("-").map(Number);
+          if (!isNaN(start) && !isNaN(end) && start <= end) {
+            for (let i = start; i <= end; i++) {
+              pages.add(i);
+            }
+          }
+        } else {
+          const num = Number(part);
+          if (!isNaN(num)) pages.add(num);
+        }
+      }
+
+      return pages.size;
+    }
+
+    const { name, value } = e.target;
+
+    const updatedOptions = {
+      ...printOptions,
+      [name]: value,
+    };
+
+    setPrintOptions(updatedOptions);
+
+    if (
+      name === "specificPages" &&
+      updatedOptions.pages === "specific" &&
+      files.length > 0
+    ) {
+      const parsedCount = parsePageRange(value.trim());
+      if (parsedCount > 0) {
+        setTotalPages(parsedCount);
+        fetchPriceEstimate(parsedCount);
+      }
+    } else if (name === "pages" && value === "all" && files.length > 0) {
+      // User switched back to 'all'
+      fetchPriceEstimate(totalPages);
+    }
   };
 
   const handlePageSelection = (e) => {
@@ -67,64 +170,97 @@ const [totalPrice, setTotalPrice] = useState(null);
 
   const { user } = useUser();
 
-const handleSubmit = async () => {
-  if (!files.length) {
-    setMessage("Please upload at least one file.");
-    console.warn("No files selected.");
-    return;
-  }
+  const fetchPriceEstimate = async (pages) => {
+    const { color, sides, copies } = printOptions;
 
-  if (!user) {
-    setMessage("You must be signed in to submit.");
-    console.warn("User not signed in.");
-    return;
-  }
+    try {
+      const query = new URLSearchParams({
+        color,
+        sides,
+        copies,
+        pages,
+      });
 
-  setMessage("Uploading...");
-  console.log("Starting file upload...");
+      const res = await fetch(
+        `http://localhost:5000/api/price-estimate?${query.toString()}`
+      );
+      const data = await res.json();
 
-  try {
-    const formData = new FormData();
+      if (res.ok) {
+        setTotalPrice(data.totalPrice);
+      } else {
+        console.error("Price fetch error:", data.error);
+      }
+    } catch (err) {
+      console.error("Price fetch failed:", err);
+    }
+  };
 
-    files.forEach((file, index) => {
-      console.log(`Appending file ${index + 1}: ${file.name}`);
-      formData.append("files", file);
-    });
+  useEffect(() => {
+    if (priceCalculated && totalPages > 0) {
+      fetchPriceEstimate(totalPages);
+    }
+  }, [printOptions.color, printOptions.sides, printOptions.copies]);
 
-    const email = user.primaryEmailAddress.emailAddress;
-    console.log("User email:", email);
-    formData.append("email", email);
-
-    console.log("Print options:", printOptions);
-    formData.append("printOptions", JSON.stringify(printOptions));
-
-    const res = await fetch("http://localhost:5000/api/print-request", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const { error } = await res.json();
-      console.error("Server responded with error:", error);
-      throw new Error(error || "Print request failed");
+  const handleSubmit = async () => {
+    if (!files.length) {
+      setMessage("Please upload at least one file.");
+      console.warn("No files selected.");
+      return;
     }
 
-    const result = await res.json();
-console.log("Server response:", result);
-setTotalPages(result.totalPages);
-setTotalPrice(result.totalPrice);
-setMessage(
-  `Print request submitted successfully! Total pages: ${result.totalPages}, Total price: ₹${result.totalPrice}`
-);
-setFiles([]);
-  } catch (err) {
-    console.error("Error during handleSubmit:", err);
-    setMessage(`Error: ${err.message}`);
-  } finally {
-    console.log("Upload process completed.");
-    setTimeout(() => setMessage(""), 5000);
-  }
-};
+    if (!user) {
+      setMessage("You must be signed in to submit.");
+      console.warn("User not signed in.");
+      return;
+    }
+
+    setMessage("Uploading...");
+    console.log("Starting file upload...");
+
+    try {
+      const formData = new FormData();
+
+      files.forEach((file, index) => {
+        console.log(`Appending file ${index + 1}: ${file.name}`);
+        formData.append("files", file);
+      });
+
+      const email = user.primaryEmailAddress.emailAddress;
+      console.log("User email:", email);
+      formData.append("email", email);
+
+      console.log("Print options:", printOptions);
+      formData.append("printOptions", JSON.stringify(printOptions));
+
+      const res = await fetch("http://localhost:5000/api/print-request", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const { error } = await res.json();
+        console.error("Server responded with error:", error);
+        throw new Error(error || "Print request failed");
+      }
+
+      const result = await res.json();
+      console.log("Server response:", result);
+      setTotalPages(result.totalPages);
+      setTotalPrice(result.totalPrice);
+      setMessage(`Print request submitted successfully!`);
+      setFiles([]);
+      setTotalPages(0);
+      setTotalPrice(0);
+      setPriceCalculated(false);
+    } catch (err) {
+      console.error("Error during handleSubmit:", err);
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      console.log("Upload process completed.");
+      setTimeout(() => setMessage(""), 5000);
+    }
+  };
 
   const removeFile = (indexToRemove) => {
     setFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
@@ -147,7 +283,9 @@ setFiles([]);
           <div className="p-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl shadow-lg">
             <FileText className="w-5 h-5 text-white" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-800">Document Upload</h3>
+          <h3 className="text-xl font-semibold text-gray-800">
+            Document Upload
+          </h3>
         </div>
 
         <div
@@ -169,14 +307,16 @@ setFiles([]);
               <p className="text-xl font-medium text-gray-800 mb-2">
                 Drop files here or click to browse
               </p>
-              <p className="text-gray-500">Supports PDF, DOCX, PPTX and more</p>
+              <p className="text-gray-500">Supports PDF and Images.</p>
             </div>
           </div>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            onChange={(e) => e.target.files && handleFilesChange(e.target.files)}
+            onChange={(e) =>
+              e.target.files && handleFilesChange(e.target.files)
+            }
             className="hidden"
           />
         </div>
@@ -199,7 +339,9 @@ setFiles([]);
                   </div>
                   <div>
                     <p className="text-gray-800 font-medium">{file.name}</p>
-                    <p className="text-gray-600 text-sm">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="text-gray-600 text-sm">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
                   </div>
                 </div>
                 <button
@@ -220,12 +362,16 @@ setFiles([]);
           <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-lg">
             <Settings className="w-5 h-5 text-white" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-800">Print Settings</h3>
+          <h3 className="text-xl font-semibold text-gray-800">
+            Print Settings
+          </h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-3">
-            <label className="block text-gray-700 font-medium">Print Color</label>
+            <label className="block text-gray-700 font-medium">
+              Print Color
+            </label>
             <select
               name="color"
               value={printOptions.color}
@@ -251,7 +397,9 @@ setFiles([]);
           </div>
 
           <div className="space-y-3">
-            <label className="block text-gray-700 font-medium">Number of Copies</label>
+            <label className="block text-gray-700 font-medium">
+              Number of Copies
+            </label>
             <input
               type="number"
               name="copies"
@@ -278,7 +426,9 @@ setFiles([]);
 
         {isSpecificPagesInputVisible && (
           <div className="mt-6 space-y-3">
-            <label className="block text-gray-700 font-medium">Enter Specific Pages</label>
+            <label className="block text-gray-700 font-medium">
+              Enter Specific Pages
+            </label>
             <input
               type="text"
               name="specificPages"
@@ -291,7 +441,9 @@ setFiles([]);
         )}
 
         <div className="mt-6 space-y-3">
-          <label className="block text-gray-700 font-medium">Additional Comments (Optional)</label>
+          <label className="block text-gray-700 font-medium">
+            Additional Comments (Optional)
+          </label>
           <textarea
             name="comments"
             value={printOptions.comments}
@@ -301,12 +453,17 @@ setFiles([]);
             className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 resize-none"
           />
         </div>
-        {totalPages !== null && totalPrice !== null && (
+        {/* {totalPages !== null && totalPrice !== null && (
   <p className="text-green-700 bg-green-100 border border-green-300 rounded-xl px-4 py-2 text-center font-medium mt-4">
     
     <span>Total pages:</span> {totalPages}, <span>Total price:</span> ₹{totalPrice}
   </p>
-)}
+)} */}
+        {totalPages > 0 && (
+          <div className="mt-4 p-4 bg-indigo-50 rounded-xl border border-indigo-200 text-indigo-700 font-medium">
+            Total Pages: {totalPages} | Estimated Price: ₹{totalPrice}
+          </div>
+        )}
 
         <div className="mt-8 flex flex-col items-center space-y-4">
           <button

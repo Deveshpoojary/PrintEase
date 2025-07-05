@@ -1,28 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { useUser } from '@clerk/clerk-react';
+import React, { useEffect, useState } from "react";
+import { useUser } from "@clerk/clerk-react";
 import {
   Search,
   Filter,
   Download,
-  Eye,
   Calendar,
   FileText,
   Printer,
   Clock,
   X,
-  User
-} from 'lucide-react';
+} from "lucide-react";
 
 const History = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [historyData, setHistoryData] = useState([]);
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const { user } = useUser();
 
   useEffect(() => {
     const fetchHistory = async () => {
       if (!user) return;
-
       try {
         const res = await fetch(
           `http://localhost:5000/api/print-request/user-history?email=${user.primaryEmailAddress.emailAddress}`
@@ -30,33 +28,32 @@ const History = () => {
         const data = await res.json();
         setHistoryData(data);
       } catch (err) {
-        console.error('Failed to fetch print history:', err);
+        console.error("Failed to fetch print history:", err);
       }
     };
-
     fetchHistory();
   }, [user]);
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-700 border-green-200';
-      case 'processing':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'failed':
-        return 'bg-red-100 text-red-700 border-red-200';
+      case "completed":
+        return "bg-green-100 text-green-700 border-green-200";
+      case "processing":
+        return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "failed":
+        return "bg-red-100 text-red-700 border-red-200";
       default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
+        return "bg-gray-100 text-gray-700 border-gray-200";
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'completed':
+      case "completed":
         return <Download className="w-4 h-4" />;
-      case 'processing':
+      case "processing":
         return <Clock className="w-4 h-4" />;
-      case 'failed':
+      case "failed":
         return <X className="w-4 h-4" />;
       default:
         return <Clock className="w-4 h-4" />;
@@ -64,13 +61,35 @@ const History = () => {
   };
 
   const filteredHistory = historyData.filter((item) => {
-    const matchesSearch = item.file_url
-      ?.toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const fileNameMatch = Array.isArray(item.file_url)
+      ? item.file_url.join(" ").toLowerCase()
+      : (item.file_url || "").toLowerCase();
+    return (
+      fileNameMatch.includes(searchTerm.toLowerCase()) &&
+      (statusFilter === "all" || item.status === statusFilter)
+    );
   });
+
+  const parseFileUrls = (file_url) => {
+    try {
+      if (typeof file_url === "string") {
+        const parsed = JSON.parse(file_url);
+        if (Array.isArray(parsed)) return parsed;
+        return Object.values(parsed);
+      } else if (Array.isArray(file_url)) {
+        return file_url;
+      } else {
+        return [file_url];
+      }
+    } catch (err) {
+      return file_url?.split(",") || [];
+    }
+  };
+
+  const isImage = (filename) =>
+    /\.(jpe?g|png|gif|webp|bmp)$/i.test(filename.toLowerCase());
+
+  const isPdf = (filename) => /\.pdf$/i.test(filename.toLowerCase());
 
   return (
     <div className="space-y-8">
@@ -83,30 +102,27 @@ const History = () => {
         </p>
       </div>
 
-      {/* Search & Filters */}
+      {/* Filters */}
       <div className="bg-white/80 backdrop-blur-lg rounded-3xl p-6 border border-white/40 shadow-xl">
-        <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-          <div className="flex-1 relative min-w-[250px]">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="w-5 h-5 text-gray-500" />
-            </div>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative w-full md:w-1/2">
+            <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
             <input
               type="text"
               placeholder="Search by file name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white/60 border border-gray-200 rounded-xl pl-12 pr-4 py-3 text-gray-800 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200"
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl bg-white/60 text-gray-800"
             />
           </div>
-
-          <div className="flex items-center gap-3 min-w-[200px]">
-            <Filter className="w-5 h-5 text-gray-500" />
+          <div className="flex items-center gap-3">
+            <Filter className="text-gray-500 w-5 h-5" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200"
+              className="border border-gray-200 rounded-xl px-4 py-3 bg-white/60 text-gray-800"
             >
-              <option value="all">All Status</option>
+              <option value="all">All</option>
               <option value="completed">Completed</option>
               <option value="processing">Processing</option>
               <option value="failed">Failed</option>
@@ -115,128 +131,160 @@ const History = () => {
         </div>
       </div>
 
-      {/* History Cards */}
+      {/* Request Cards */}
       <div className="space-y-4">
-        {filteredHistory.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur-lg rounded-3xl p-12 border border-white/40 shadow-xl text-center">
-            <div className="mx-auto w-16 h-16 bg-gradient-to-r from-gray-400 to-gray-500 rounded-2xl flex items-center justify-center mb-4">
-              <FileText className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">
-              No print history found
-            </h3>
-            <p className="text-gray-600">
-              No printing requests match your search criteria.
-            </p>
-          </div>
-        ) : (
-          filteredHistory.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white/80 backdrop-blur-lg rounded-2xl p-6 border border-white/40 shadow-xl hover:bg-white/90 transition-all duration-200"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg shadow-lg">
-                      <FileText className="w-4 h-4 text-white" />
-                    </div>
-                    <h3 className="font-semibold text-gray-800 text-lg">
-                      {item.file_url?.split('/').pop() || 'Unknown File'}
-                    </h3>
+        {filteredHistory.map((item) => (
+          <div
+            key={item.id}
+            onClick={() => setSelectedRequest(item)}
+            className="cursor-pointer bg-white/80 p-6 rounded-2xl border border-white/40 shadow-lg hover:scale-[1.01] transition-transform"
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg shadow-lg">
+                    <FileText className="w-4 h-4 text-white" />
                   </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Calendar className="w-4 h-4" />
-                      <span>
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Clock className="w-4 h-4" />
-                      <span>
-                        {new Date(item.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <FileText className="w-4 h-4" />
-                      <span>{item.pages} pages</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Printer className="w-4 h-4" />
-                      <span>{item.copies} copies</span>
-                    </div>
-                  </div>
+                  <h3 className="font-semibold text-gray-800 text-lg">
+                    {parseFileUrls(item.file_url)
+                      .map((url) => url.split("/").pop())
+                      .join(", ")}
+                  </h3>
                 </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right space-y-2">
-                    <div
-                      className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium border ${getStatusColor(
-                        item.status
-                      )}`}
-                    >
-                      {getStatusIcon(item.status)}
-                      <span className="capitalize">{item.status}</span>
-                    </div>
-                    <div className="text-gray-800 font-semibold">
-                      ${item.cost || '0.00'}
-                    </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <span>
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    <span>
+                      {new Date(item.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    <span>{item.pages} pages</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Printer className="w-4 h-4" />
+                    <span>{item.copies} copies</span>
                   </div>
                 </div>
               </div>
+              <div className="text-right space-y-2">
+                <div
+                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium border ${getStatusColor(
+                    item.status
+                  )}`}
+                >
+                  {getStatusIcon(item.status)}
+                  <span className="capitalize">{item.status}</span>
+                </div>
+                <div className="text-gray-800 font-semibold">
+                  ₹{item.price || "0.00"}
+                </div>
+              </div>
             </div>
-          ))
-        )}
+          </div>
+        ))}
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <SummaryCard
-          title="Total Requests"
-          count={historyData.length}
-          color="blue"
-        />
-        <SummaryCard
-          title="Completed"
-          count={historyData.filter((i) => i.status === 'completed').length}
-          color="green"
-        />
-        <SummaryCard
-          title="In Progress"
-          count={historyData.filter((i) => i.status === 'processing').length}
-          color="yellow"
-        />
-        <SummaryCard
-          title="Total Spent"
-          count={`$${historyData
-            .reduce((sum, i) => sum + parseFloat(i.cost || 0), 0)
-            .toFixed(2)}`}
-          color="purple"
-        />
-      </div>
-    </div>
-  );
-};
+      {/* Modal */}
+      {selectedRequest && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-4xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedRequest(null)}
+              className="absolute top-3 right-3 bg-red-100 text-red-600 px-3 py-1 rounded-xl hover:bg-red-200"
+            >
+              Close
+            </button>
 
-const SummaryCard = ({ title, count, color }) => {
-  const gradientMap = {
-    blue: 'from-blue-100 to-cyan-100 border-blue-200 text-blue-600',
-    green: 'from-green-100 to-emerald-100 border-green-200 text-green-600',
-    yellow: 'from-yellow-100 to-orange-100 border-yellow-200 text-yellow-600',
-    purple: 'from-purple-100 to-pink-100 border-purple-200 text-purple-600'
-  };
+            <h2 className="text-2xl font-bold text-indigo-700 mb-4">
+              Request Details
+            </h2>
+            <div className="space-y-2 text-sm">
+              <p>
+                <strong>Email:</strong> {selectedRequest.email}
+              </p>
+              <p>
+                <strong>Pages:</strong> {selectedRequest.pages}
+              </p>
+              <p>
+                <strong>Copies:</strong> {selectedRequest.copies}
+              </p>
+              <p>
+                <strong>Color:</strong> {selectedRequest.color}
+              </p>
+              <p>
+                <strong>Sides:</strong> {selectedRequest.sides}
+              </p>
+              {selectedRequest.specific_pages && (
+                <p>
+                  <strong>Specific Pages:</strong>{" "}
+                  {selectedRequest.specific_pages}
+                </p>
+              )}
+              {selectedRequest.comments && (
+                <p>
+                  <strong>Comments:</strong> {selectedRequest.comments}
+                </p>
+              )}
+              <p>
+                <strong>Status:</strong> {selectedRequest.status}
+              </p>
+              <p>
+                <strong>Cost:</strong> ₹{selectedRequest.price || 0}
+              </p>
+            </div>
 
-  return (
-    <div
-      className={`bg-gradient-to-r ${gradientMap[color]} rounded-2xl p-6 text-center`}
-    >
-      <div className="text-2xl font-bold text-gray-800 mb-2">{count}</div>
-      <div className="text-sm font-medium">{title}</div>
+            <h3 className="mt-6 mb-2 text-lg font-semibold text-indigo-600">
+              Files:
+            </h3>
+            <div className="space-y-6">
+              {parseFileUrls(selectedRequest.file_url).map((file, index) => {
+                const fileUrl = file.trim();
+                return (
+                  <div
+                    key={index}
+                    className="border rounded-xl overflow-hidden bg-gray-50"
+                  >
+                    <div className="bg-gray-100 px-4 py-2 font-medium text-sm text-gray-800">
+                      {fileUrl.split("/").pop()}
+                    </div>
+                    {isImage(fileUrl) ? (
+                      <img
+                        src={fileUrl}
+                        alt="Uploaded file"
+                        className="w-full max-h-[500px] object-contain"
+                      />
+                    ) : isPdf(fileUrl) ? (
+                      <iframe
+                        title={`file-preview-${index}`}
+                        src={`https://docs.google.com/viewerng/viewer?url=${encodeURIComponent(
+                          fileUrl
+                        )}&embedded=true`}
+                        className="w-full h-96"
+                        frameBorder="0"
+                      />
+                    ) : (
+                      <p className="p-4 text-sm text-red-600">
+                        Unsupported file type.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

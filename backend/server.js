@@ -10,6 +10,7 @@ const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const path = require('path');
 const uploadd = multer({ storage: multer.memoryStorage() });
+const { getPageCount } = require("./utils/pageCounter");
 
 const app = express();
 app.use(cors());
@@ -27,6 +28,43 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+app.get("/api/price-estimate", async (req, res) => {
+  try {
+    const { color, sides, copies, pages } = req.query;
+
+    if (!color || !sides || !copies || !pages) {
+      return res.status(400).json({ error: "Missing required query parameters" });
+    }
+
+    // Validate values
+    if (color === 'color' && sides === 'double') {
+      return res.status(400).json({ error: "Double-sided color printing is not supported." });
+    }
+
+    const priceQuery = await pool.query('SELECT * FROM prices LIMIT 1');
+    const { single_side_cost, double_side_cost, color_cost } = priceQuery.rows[0];
+
+    let perPageCost = 0;
+    if (color === 'color') {
+      perPageCost = color_cost;
+    } else if (sides === 'single') {
+      perPageCost = single_side_cost;
+    } else if (sides === 'double') {
+      perPageCost = double_side_cost;
+    }
+
+    const totalPages = parseInt(pages);
+    const totalCopies = parseInt(copies);
+    const totalPrice = totalPages * totalCopies * perPageCost;
+
+    res.json({ totalPages, totalPrice });
+  } catch (err) {
+    console.error("Price estimate error:", err);
+    res.status(500).json({ error: "Failed to calculate price estimate" });
+  }
+});
+
+
 // POST endpoint for print requests
 app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
   try {
@@ -38,42 +76,34 @@ app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Extract options
     const { color, sides, copies, pages, specificPages, comments } = printOptions;
 
-    // ⛔ Prevent double side color
-    if (color === 'color' && sides === 'double') {
+    if (color === "color" && sides === "double") {
       return res.status(400).json({ error: "Double-sided color printing is not supported." });
     }
 
-    // 🧮 Count total pages
     let totalPages = 0;
+
     for (const file of files) {
-      if (file.mimetype === 'application/pdf') {
-        const pdfData = await pdfParse(file.buffer);
-        totalPages += pdfData.numpages;
-      } else {
-        return res.status(400).json({ error: "Only PDF files are supported for page counting." });
+      try {
+        const pages = await getPageCount(file.buffer, file.mimetype);
+        totalPages += pages;
+      } catch (err) {
+        console.warn("Skipping unsupported file:", file.originalname, err.message);
+        return res.status(400).json({ error: `Unsupported file: ${file.originalname}` });
       }
     }
 
-    // 💸 Fetch pricing
-    const priceQuery = await pool.query('SELECT * FROM prices LIMIT 1');
+    const priceQuery = await pool.query("SELECT * FROM prices LIMIT 1");
     const { single_side_cost, double_side_cost, color_cost } = priceQuery.rows[0];
 
-    // 💰 Price calculation
     let perPageCost = 0;
-    if (color === 'color') {
-      perPageCost = color_cost;
-    } else if (sides === 'single') {
-      perPageCost = single_side_cost;
-    } else if (sides === 'double') {
-      perPageCost = double_side_cost;
-    }
+    if (color === "color") perPageCost = color_cost;
+    else if (sides === "single") perPageCost = single_side_cost;
+    else if (sides === "double") perPageCost = double_side_cost;
 
-    const totalPrice = totalPages * copies * perPageCost;
+    const totalPrice = totalPages * parseInt(copies) * perPageCost;
 
-    // ☁️ Upload to Supabase
     const uploadedFiles = [];
     for (const file of files) {
       const filename = `uploads/${Date.now()}-${file.originalname}`;
@@ -94,8 +124,8 @@ app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
       )}/storage/v1/object/public/print-files/${data.path}`;
       uploadedFiles.push(publicUrl);
     }
+    const fileUrlsAsString = uploadedFiles.join(","); 
 
-    // 📝 Store in DB
     const insertSQL = `
       INSERT INTO print_requests
         (email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
@@ -106,14 +136,14 @@ app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
 
     const { rows } = await pool.query(insertSQL, [
       email,
-      uploadedFiles,
+      fileUrlsAsString,
       color,
       sides,
       copies,
       pages,
       specificPages,
       comments,
-      totalPrice
+      totalPrice,
     ]);
 
     res.json({
@@ -122,7 +152,6 @@ app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
       totalPages,
       totalPrice,
     });
-
   } catch (err) {
     console.error("Print request error:", err);
     res.status(500).json({ error: "Print request failed" });
@@ -140,7 +169,7 @@ app.get('/api/print-request/user-history', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, email, file_url, color, sides, copies, pages, specific_pages, comments, created_at
+      `SELECT id, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
        FROM print_requests
        WHERE email = $1
        ORDER BY created_at DESC`,
@@ -157,28 +186,29 @@ app.get('/api/print-request/user-history', async (req, res) => {
 // Admin routeto get all print-requests
 app.get('/api/admin/print-requests', async (req, res) => {
   try {
-    const { data, error } = await supabase.storage
-      .from('print-files')
-      .list('uploads', { limit: 100, sortBy: { column: 'name', order: 'desc' } });
+    const result = await pool.query(
+      `SELECT id, email, pages, copies, color, sides, specific_pages, comments, created_at, file_url
+       FROM print_requests
+       ORDER BY created_at DESC`
+    );
 
-    if (error) return res.status(500).json({ error: error.message });
-
-    const requests = data.map((file) => ({
-      file_url: file.name, // only file name
-      created_at: file.created_at || new Date().toISOString(), // fallback if undefined
-      email: 'unknown', // you can replace this if you store email somewhere
-      pages: 0,
-      copies: 1,
-      color: 'color',
-      sides: 'single',
-      specific_pages: '',
-      comments: '',
+    const requests = result.rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      pages: row.pages,
+      copies: row.copies,
+      color: row.color,
+      sides: row.sides,
+      specific_pages: row.specific_pages,
+      comments: row.comments,
+      created_at: row.created_at,
+      file_url: row.file_url, // this is expected to be an array of file names
     }));
 
     res.json(requests);
   } catch (err) {
-    console.error('Error fetching files from Supabase:', err.message);
-    res.status(500).json({ error: 'Unable to fetch files' });
+    console.error('Error fetching print requests:', err.message);
+    res.status(500).json({ error: 'Unable to fetch print requests' });
   }
 });
 

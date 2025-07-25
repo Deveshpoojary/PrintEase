@@ -152,6 +152,23 @@ const UploadAndPrint = () => {
         setTotalPages(parsedCount);
         fetchPriceEstimate(parsedCount);
       }
+
+      const parsedPages = value;
+      const uniquePages = Array.from(new Set(parsedPages)).filter(
+      (page) => page > 0
+    );
+      const outOfRangePages = uniquePages.filter((page) => page > totalPages);
+
+    // ✅ Only show alert if out-of-range pages are fully entered
+    if (outOfRangePages.length > 0) {
+      return; // Don’t update anything until valid
+    }
+
+    // Update only when valid input
+    if (uniquePages.length > 0) {
+      setTotalPages(uniquePages.length);
+      fetchPriceEstimate(uniquePages.length);
+    }
     } else if (name === "pages" && value === "all" && files.length > 0) {
       // User switched back to 'all'
       fetchPriceEstimate(totalPages);

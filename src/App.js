@@ -15,7 +15,9 @@ import {
 // Import your components/pages
 import Main from "./components/Main";
 import Dashboard from "./pages/Dashboard";
+import Unauthorized from "./pages/Unauthorized";
 import NotFoundPage from './components/NotFoundPage';
+import ProtectedRoute from "./components/ProtectedRoute";
 import ViewDocs from './pages/ViewDocs';
 import AdminPanel from './admin/AdminPanel';
 
@@ -30,6 +32,7 @@ function App() {
           <Route path="/" element={<Main />} />
           <Route path="/sign-in" element={<SignIn routing="path" path="/sign-in" />} />
           <Route path="/sign-up" element={<SignUp routing="path" path="/sign-up" />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
           
           <Route
             path="/dashboard"
@@ -44,7 +47,9 @@ function App() {
             path="/admin"
             element={
               <RequireAuth>
-                <AdminPanel />
+                <ProtectedRoute>
+                  <AdminPanel />
+                </ProtectedRoute>
               </RequireAuth>
             }
           />

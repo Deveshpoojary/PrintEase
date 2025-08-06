@@ -5,16 +5,20 @@ const multer = require("multer");
 const { Pool } = require("pg");
 const { createClient } = require("@supabase/supabase-js");
 const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first'); 
 const pdfParse = require('pdf-parse');
 const fs = require('fs');
 const path = require('path');
 const uploadd = multer({ storage: multer.memoryStorage() });
 const { getPageCount } = require("./utils/pageCounter");
+const Stripe = require("stripe");
+
+dns.setDefaultResultOrder('ipv4first'); 
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY); // from .env stripe secret key
 
 const upload = multer(); // Use memory storage
 
@@ -27,6 +31,232 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// app.post('/create-checkout-session', async (req, res) => {
+//   const { amount, email } = req.body;
+
+//   try {
+//     const session = await stripe.checkout.sessions.create({
+//       payment_method_types: ['card'],
+//       line_items: [{
+//         price_data: {
+//           currency: 'inr',
+//           product_data: {
+//             name: 'Document Print Order',
+//           },
+//           unit_amount: amount,
+//         },
+//         quantity: 1,
+//       }],
+//       mode: 'payment',
+//       customer_email: email,
+//       success_url: 'http://localhost:3000/dashboard',
+//       cancel_url: 'http://localhost:3000/cancel',
+//     });
+
+//     res.json({ sessionId: session.id });
+//   } catch (error) {
+//     console.error("Stripe error:", error.message);
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
+app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) => {
+  try {
+    const { email, name } = req.body;
+    const printOptions = JSON.parse(req.body.printOptions);
+    const files = req.files;
+
+    if (!email || !name || !files || files.length === 0) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const { color, sides, copies, pages, specificPages, comments } = printOptions;
+    if (color === "color" && sides === "double") {
+      return res.status(400).json({ error: "Double-sided color printing not supported." });
+    }
+
+    let totalPages = 0;
+    for (const file of files) {
+      const pages = await getPageCount(file.buffer, file.mimetype);
+      totalPages += pages;
+    }
+
+    const priceQuery = await pool.query("SELECT * FROM prices LIMIT 1");
+    const { single_side_cost, double_side_cost, color_cost } = priceQuery.rows[0];
+
+    let perPageCost = 0;
+    if (color === "color") perPageCost = color_cost;
+    else if (sides === "single") perPageCost = single_side_cost;
+    else if (sides === "double") perPageCost = double_side_cost;
+
+    const totalPrice = totalPages * parseInt(copies) * perPageCost;
+
+    // Upload files to Supabase
+    const uploadedFiles = [];
+    for (const file of files) {
+      const filename = `uploads/${Date.now()}-${file.originalname}`;
+      const { data, error } = await supabase.storage
+        .from("print-files")
+        .upload(filename, file.buffer, {
+          contentType: file.mimetype,
+        });
+
+      if (error) return res.status(500).json({ error: "File upload failed" });
+
+      const publicUrl = `https://${process.env.SUPABASE_URL.replace(
+        "https://",
+        ""
+      )}/storage/v1/object/public/print-files/${data.path}`;
+      uploadedFiles.push(publicUrl);
+    }
+
+    const fileUrlsAsString = uploadedFiles.join(",");
+
+    // Insert into print_requests
+    const insertSQL = `
+      INSERT INTO print_requests
+        (name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      RETURNING id;
+    `;
+    const { rows } = await pool.query(insertSQL, [
+      name,
+      email,
+      fileUrlsAsString,
+      color,
+      sides,
+      copies,
+      pages,
+      specificPages,
+      comments,
+      totalPrice,
+    ]);
+    const printRequestId = rows[0].id;
+
+    // Insert into orders
+    const insertOrderSQL = `
+      INSERT INTO orders 
+        (print_request_id, user_name, user_email, amount, status, payment_session_id, payment_intent_id, order_id, created_at)
+      VALUES 
+        ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    `;
+
+    const orderId = `ORD-${Date.now()}`; // generate custom order ID
+
+    await pool.query(insertOrderSQL, [
+      printRequestId,
+      name,
+      email,
+      totalPrice,
+      "pending",            // default status
+      "", // payment_session_id will be updated later
+      "", // payment_intent_id will be updated later
+      orderId,
+    ]);
+
+
+    // Create Stripe session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "inr",
+            product_data: {
+              name: "PrintEase Order",
+            },
+            unit_amount: Math.round(totalPrice * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+       success_url: `http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}&orderId=${orderId}`,
+  cancel_url: `http://localhost:3000/cancel`,
+  metadata: {
+    printRequestId: printRequestId.toString(),
+    userEmail: email,
+    order_id: orderId,
+      },
+    });
+
+    
+    // Now update payment_session_id in order
+await pool.query(`
+  UPDATE orders 
+  SET payment_session_id = $1 
+  WHERE order_id = $2
+`, [session.id, orderId]);
+
+    res.json({ sessionId: session.id, orderId });
+  } catch (err) {
+    console.error("Stripe session creation error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// routes/payment.js or routes/order.js
+
+app.get("/api/verify-payment", async (req, res) => {
+  const { session_id } = req.query;
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(session_id, {
+      expand: ["payment_intent"],
+    });
+
+    const paymentIntent = session.payment_intent;
+    const status = paymentIntent.status;
+    const paymentIntentId = paymentIntent.id;
+    const orderId = session.metadata.order_id;
+
+    if (!orderId) {
+      return res.status(400).json({ error: "Order ID missing in Stripe metadata" });
+    }
+
+    const result = await pool.query(
+      `UPDATE orders 
+       SET payment_intent_id = $1, status = $2 
+       WHERE order_id = $3 
+       RETURNING *`,
+      [paymentIntentId, status, orderId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error("Payment verification error:", err);
+    res.status(500).json({ error: "Payment verification failed" });
+  }
+});
+
+
+
+
+
+app.get('/orders/:orderId', async (req, res) => {
+  const { orderId } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching order:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 
 app.get("/api/price-estimate", async (req, res) => {
   try {
@@ -66,97 +296,97 @@ app.get("/api/price-estimate", async (req, res) => {
 
 
 // POST endpoint for print requests
-app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
-  try {
-    const { email } = req.body;
-    const printOptions = JSON.parse(req.body.printOptions);
-    const files = req.files;
+// app.post("/api/print-request", uploadd.array("files"), async (req, res) => {
+//   try {
+//     const { email } = req.body;
+//     const printOptions = JSON.parse(req.body.printOptions);
+//     const files = req.files;
 
-    if (!email || !files || files.length === 0) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
+//     if (!email || !files || files.length === 0) {
+//       return res.status(400).json({ error: "Missing required fields" });
+//     }
 
-    const { color, sides, copies, pages, specificPages, comments } = printOptions;
+//     const { color, sides, copies, pages, specificPages, comments } = printOptions;
 
-    if (color === "color" && sides === "double") {
-      return res.status(400).json({ error: "Double-sided color printing is not supported." });
-    }
+//     if (color === "color" && sides === "double") {
+//       return res.status(400).json({ error: "Double-sided color printing is not supported." });
+//     }
 
-    let totalPages = 0;
+//     let totalPages = 0;
 
-    for (const file of files) {
-      try {
-        const pages = await getPageCount(file.buffer, file.mimetype);
-        totalPages += pages;
-      } catch (err) {
-        console.warn("Skipping unsupported file:", file.originalname, err.message);
-        return res.status(400).json({ error: `Unsupported file: ${file.originalname}` });
-      }
-    }
+//     for (const file of files) {
+//       try {
+//         const pages = await getPageCount(file.buffer, file.mimetype);
+//         totalPages += pages;
+//       } catch (err) {
+//         console.warn("Skipping unsupported file:", file.originalname, err.message);
+//         return res.status(400).json({ error: `Unsupported file: ${file.originalname}` });
+//       }
+//     }
 
-    const priceQuery = await pool.query("SELECT * FROM prices LIMIT 1");
-    const { single_side_cost, double_side_cost, color_cost } = priceQuery.rows[0];
+//     const priceQuery = await pool.query("SELECT * FROM prices LIMIT 1");
+//     const { single_side_cost, double_side_cost, color_cost } = priceQuery.rows[0];
 
-    let perPageCost = 0;
-    if (color === "color") perPageCost = color_cost;
-    else if (sides === "single") perPageCost = single_side_cost;
-    else if (sides === "double") perPageCost = double_side_cost;
+//     let perPageCost = 0;
+//     if (color === "color") perPageCost = color_cost;
+//     else if (sides === "single") perPageCost = single_side_cost;
+//     else if (sides === "double") perPageCost = double_side_cost;
 
-    const totalPrice = totalPages * parseInt(copies) * perPageCost;
+//     const totalPrice = totalPages * parseInt(copies) * perPageCost;
 
-    const uploadedFiles = [];
-    for (const file of files) {
-      const filename = `uploads/${Date.now()}-${file.originalname}`;
-      const { data, error } = await supabase.storage
-        .from("print-files")
-        .upload(filename, file.buffer, {
-          contentType: file.mimetype,
-        });
+//     const uploadedFiles = [];
+//     for (const file of files) {
+//       const filename = `uploads/${Date.now()}-${file.originalname}`;
+//       const { data, error } = await supabase.storage
+//         .from("print-files")
+//         .upload(filename, file.buffer, {
+//           contentType: file.mimetype,
+//         });
 
-      if (error) {
-        console.error("Supabase upload error:", error);
-        return res.status(500).json({ error: "File upload failed" });
-      }
+//       if (error) {
+//         console.error("Supabase upload error:", error);
+//         return res.status(500).json({ error: "File upload failed" });
+//       }
 
-      const publicUrl = `https://${process.env.SUPABASE_URL.replace(
-        "https://",
-        ""
-      )}/storage/v1/object/public/print-files/${data.path}`;
-      uploadedFiles.push(publicUrl);
-    }
-    const fileUrlsAsString = uploadedFiles.join(","); 
+//       const publicUrl = `https://${process.env.SUPABASE_URL.replace(
+//         "https://",
+//         ""
+//       )}/storage/v1/object/public/print-files/${data.path}`;
+//       uploadedFiles.push(publicUrl);
+//     }
+//     const fileUrlsAsString = uploadedFiles.join(","); 
 
-    const insertSQL = `
-      INSERT INTO print_requests
-        (email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
-      VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-      RETURNING id;
-    `;
+//     const insertSQL = `
+//       INSERT INTO print_requests
+//         (email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
+//       VALUES
+//         ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+//       RETURNING id;
+//     `;
 
-    const { rows } = await pool.query(insertSQL, [
-      email,
-      fileUrlsAsString,
-      color,
-      sides,
-      copies,
-      pages,
-      specificPages,
-      comments,
-      totalPrice,
-    ]);
+//     const { rows } = await pool.query(insertSQL, [
+//       email,
+//       fileUrlsAsString,
+//       color,
+//       sides,
+//       copies,
+//       pages,
+//       specificPages,
+//       comments,
+//       totalPrice,
+//     ]);
 
-    res.json({
-      success: true,
-      id: rows[0].id,
-      totalPages,
-      totalPrice,
-    });
-  } catch (err) {
-    console.error("Print request error:", err);
-    res.status(500).json({ error: "Print request failed" });
-  }
-});
+//     res.json({
+//       success: true,
+//       id: rows[0].id,
+//       totalPages,
+//       totalPrice,
+//     });
+//   } catch (err) {
+//     console.error("Print request error:", err);
+//     res.status(500).json({ error: "Print request failed" });
+//   }
+// });
 
 
 // Your print history endpoint here using app.get
@@ -169,7 +399,7 @@ app.get('/api/print-request/user-history', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
+      `SELECT id, name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
        FROM print_requests
        WHERE email = $1
        ORDER BY created_at DESC`,

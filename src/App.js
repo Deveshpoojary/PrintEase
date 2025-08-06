@@ -20,6 +20,7 @@ import NotFoundPage from './components/NotFoundPage';
 import ProtectedRoute from "./components/ProtectedRoute";
 import ViewDocs from './pages/ViewDocs';
 import AdminPanel from './admin/AdminPanel';
+import SuccessPage from './pages/SuccessPage';
 
 // Your Clerk publishable key
 const PUBLISHABLE_KEY = "pk_test_aGFwcHktbWFydGVuLTI3LmNsZXJrLmFjY291bnRzLmRldiQ"; // Replace this with your actual Clerk publishable key
@@ -33,6 +34,8 @@ function App() {
           <Route path="/sign-in" element={<SignIn routing="path" path="/sign-in" />} />
           <Route path="/sign-up" element={<SignUp routing="path" path="/sign-up" />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/success" element={<SuccessPage />} />
+
           
           <Route
             path="/dashboard"

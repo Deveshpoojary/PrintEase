@@ -4,6 +4,13 @@ import { useUser } from "@clerk/clerk-react";
 // import supabase from "../supabase"; // Adjust the import path as necessary
 import * as pdfjsLib from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.entry";
+import { loadStripe } from "@stripe/stripe-js";
+
+const stripePromise = loadStripe(
+  "pk_test_51RpUezGpLMJ2tSshsofGbkLrh9nHjZeyjwnpj8ao86PRzOzRiPEAK3PIFpsKzZgpUY0BJbT77g5vxB0f6OLQnOrw003O61CcJi"
+); // Replace with your test publishable key
+
+// import CheckoutButton from "../components/CheckoutButton";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -155,20 +162,20 @@ const UploadAndPrint = () => {
 
       const parsedPages = value;
       const uniquePages = Array.from(new Set(parsedPages)).filter(
-      (page) => page > 0
-    );
+        (page) => page > 0
+      );
       const outOfRangePages = uniquePages.filter((page) => page > totalPages);
 
-    // ✅ Only show alert if out-of-range pages are fully entered
-    if (outOfRangePages.length > 0) {
-      return; // Don’t update anything until valid
-    }
+      // ✅ Only show alert if out-of-range pages are fully entered
+      if (outOfRangePages.length > 0) {
+        return; // Don’t update anything until valid
+      }
 
-    // Update only when valid input
-    if (uniquePages.length > 0) {
-      setTotalPages(uniquePages.length);
-      fetchPriceEstimate(uniquePages.length);
-    }
+      // Update only when valid input
+      if (uniquePages.length > 0) {
+        setTotalPages(uniquePages.length);
+        fetchPriceEstimate(uniquePages.length);
+      }
     } else if (name === "pages" && value === "all" && files.length > 0) {
       // User switched back to 'all'
       fetchPriceEstimate(totalPages);
@@ -219,68 +226,113 @@ const UploadAndPrint = () => {
     }
   }, [printOptions.color, printOptions.sides, printOptions.copies]);
 
-  const handleSubmit = async () => {
-    if (!files.length) {
-      setMessage("Please upload at least one file.");
-      console.warn("No files selected.");
-      return;
-    }
+  // const handleSubmit = async () => {
+  //   if (!files.length) {
+  //     setMessage("Please upload at least one file.");
+  //     console.warn("No files selected.");
+  //     return;
+  //   }
 
-    if (!user) {
-      setMessage("You must be signed in to submit.");
-      console.warn("User not signed in.");
-      return;
-    }
+  //   if (!user) {
+  //     setMessage("You must be signed in to submit.");
+  //     console.warn("User not signed in.");
+  //     return;
+  //   }
 
-    setMessage("Uploading...");
-    console.log("Starting file upload...");
+  //   setMessage("Uploading...");
+  //   console.log("Starting file upload...");
 
-    try {
-      const formData = new FormData();
+  //   try {
+  //     const formData = new FormData();
 
-      files.forEach((file, index) => {
-        console.log(`Appending file ${index + 1}: ${file.name}`);
-        formData.append("files", file);
-      });
+  //     files.forEach((file, index) => {
+  //       console.log(`Appending file ${index + 1}: ${file.name}`);
+  //       formData.append("files", file);
+  //     });
 
-      const email = user.primaryEmailAddress.emailAddress;
-      console.log("User email:", email);
-      formData.append("email", email);
+  //     const email = user.primaryEmailAddress.emailAddress;
+  //     console.log("User email:", email);
+  //     formData.append("email", email);
 
-      console.log("Print options:", printOptions);
-      formData.append("printOptions", JSON.stringify(printOptions));
+  //     console.log("Print options:", printOptions);
+  //     formData.append("printOptions", JSON.stringify(printOptions));
 
-      const res = await fetch("http://localhost:5000/api/print-request", {
-        method: "POST",
-        body: formData,
-      });
+  //     const res = await fetch("http://localhost:5000/api/print-request", {
+  //       method: "POST",
+  //       body: formData,
+  //     });
 
-      if (!res.ok) {
-        const { error } = await res.json();
-        console.error("Server responded with error:", error);
-        throw new Error(error || "Print request failed");
-      }
+  //     if (!res.ok) {
+  //       const { error } = await res.json();
+  //       console.error("Server responded with error:", error);
+  //       throw new Error(error || "Print request failed");
+  //     }
 
-      const result = await res.json();
-      console.log("Server response:", result);
-      setTotalPages(result.totalPages);
-      setTotalPrice(result.totalPrice);
-      setMessage(`Print request submitted successfully!`);
-      setFiles([]);
-      setTotalPages(0);
-      setTotalPrice(0);
-      setPriceCalculated(false);
-    } catch (err) {
-      console.error("Error during handleSubmit:", err);
-      setMessage(`Error: ${err.message}`);
-    } finally {
-      console.log("Upload process completed.");
-      setTimeout(() => setMessage(""), 5000);
-    }
-  };
+  //     const result = await res.json();
+  //     console.log("Server response:", result);
+  //     setTotalPages(result.totalPages);
+  //     setTotalPrice(result.totalPrice);
+  //     setMessage(`Print request submitted successfully!`);
+  //     setFiles([]);
+  //     setTotalPages(0);
+  //     setTotalPrice(0);
+  //     setPriceCalculated(false);
+  //   } catch (err) {
+  //     console.error("Error during handleSubmit:", err);
+  //     setMessage(`Error: ${err.message}`);
+  //   } finally {
+  //     console.log("Upload process completed.");
+  //     setTimeout(() => setMessage(""), 5000);
+  //   }
+  // };
 
   const removeFile = (indexToRemove) => {
     setFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  const handleStripeCheckout = async () => {
+    if (!files.length || !user) {
+      setMessage("Please upload files and sign in before paying.");
+      return;
+    }
+
+    setMessage("Creating payment session...");
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      formData.append("email", user.primaryEmailAddress.emailAddress);
+      formData.append("name", user.fullName || user.username || "Unknown");
+      formData.append("printOptions", JSON.stringify(printOptions));
+
+      // Send request to backend to create Stripe session
+      const res = await fetch(
+        "http://localhost:5000/api/create-stripe-session",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok)
+        throw new Error(data.error || "Stripe session creation failed");
+
+      const stripe = await loadStripe(
+        "pk_test_51RpUezGpLMJ2tSshsofGbkLrh9nHjZeyjwnpj8ao86PRzOzRiPEAK3PIFpsKzZgpUY0BJbT77g5vxB0f6OLQnOrw003O61CcJi"
+      );
+      const result = await stripe.redirectToCheckout({
+        sessionId: data.sessionId,
+      });
+
+      if (result.error) {
+        setMessage(`Payment error: ${result.error.message}`);
+      }
+    } catch (err) {
+      console.error("Stripe Checkout error:", err);
+      setMessage("Something went wrong during checkout.");
+    }
   };
 
   return (
@@ -483,14 +535,24 @@ const UploadAndPrint = () => {
         )}
 
         <div className="mt-8 flex flex-col items-center space-y-4">
-          <button
+          {/* <button
             onClick={handleSubmit}
             disabled={files.length === 0}
             className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg"
           >
             <Send className="w-5 h-5" />
             Submit Print Request
-          </button>
+          </button> */}
+          {/* //<CheckoutButton/> */}
+          
+            <button
+              onClick={handleStripeCheckout}
+              className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-2xl transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg"
+            >
+              <Send className="w-5 h-5" />
+              Proceed to Secure Payment (₹{totalPrice})
+            </button>
+          
 
           {message && (
             <div

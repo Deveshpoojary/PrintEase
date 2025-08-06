@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SignedIn, UserButton } from "@clerk/clerk-react";
 import { FileText, Calendar, History, Upload } from "lucide-react";
 import UploadAndPrint from "./UploadAndPrint";
@@ -7,6 +8,13 @@ import HistoryComponent from "./History";
 
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState("uploadAndPrint");
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const sectionFromQuery = searchParams.get("section");
+    if (sectionFromQuery) {
+      setActiveSection(sectionFromQuery);
+    }
+  }, [searchParams]);
 
   const renderSection = () => {
     switch (activeSection) {

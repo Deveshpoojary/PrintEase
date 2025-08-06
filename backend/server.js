@@ -63,11 +63,11 @@ const supabase = createClient(
 
 app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, name } = req.body;
     const printOptions = JSON.parse(req.body.printOptions);
     const files = req.files;
 
-    if (!email || !files || files.length === 0) {
+    if (!email || !name || !files || files.length === 0) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -113,15 +113,16 @@ app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) 
 
     const fileUrlsAsString = uploadedFiles.join(",");
 
-    // Insert with pending payment
+    // Insert into print_requests
     const insertSQL = `
       INSERT INTO print_requests
-        (email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
+        (name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
       RETURNING id;
     `;
     const { rows } = await pool.query(insertSQL, [
+      name,
       email,
       fileUrlsAsString,
       color,
@@ -132,10 +133,31 @@ app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) 
       comments,
       totalPrice,
     ]);
-
     const printRequestId = rows[0].id;
 
-    // Create Stripe Checkout session
+    // Insert into orders
+    const insertOrderSQL = `
+      INSERT INTO orders 
+        (print_request_id, user_name, user_email, amount, status, payment_session_id, payment_intent_id, order_id, created_at)
+      VALUES 
+        ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    `;
+
+    const orderId = `ORD-${Date.now()}`; // generate custom order ID
+
+    await pool.query(insertOrderSQL, [
+      printRequestId,
+      name,
+      email,
+      totalPrice,
+      "pending",            // default status
+      "", // payment_session_id will be updated later
+      "", // payment_intent_id will be updated later
+      orderId,
+    ]);
+
+
+    // Create Stripe session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -145,25 +167,95 @@ app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) 
             product_data: {
               name: "PrintEase Order",
             },
-            unit_amount: Math.round(totalPrice * 100), // Convert to paise
+            unit_amount: Math.round(totalPrice * 100),
           },
           quantity: 1,
         },
       ],
       mode: "payment",
-      success_url: `http://localhost:3000/success?orderId=${printRequestId}`,
-      cancel_url: `http://localhost:3000/cancel`,
-      metadata: {
-        printRequestId: printRequestId.toString(),
+       success_url: `http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}&orderId=${orderId}`,
+  cancel_url: `http://localhost:3000/cancel`,
+  metadata: {
+    printRequestId: printRequestId.toString(),
+    userEmail: email,
+    order_id: orderId,
       },
     });
 
-    res.json({ sessionId: session.id });
+    
+    // Now update payment_session_id in order
+await pool.query(`
+  UPDATE orders 
+  SET payment_session_id = $1 
+  WHERE order_id = $2
+`, [session.id, orderId]);
+
+    res.json({ sessionId: session.id, orderId });
   } catch (err) {
     console.error("Stripe session creation error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// routes/payment.js or routes/order.js
+
+app.get("/api/verify-payment", async (req, res) => {
+  const { session_id } = req.query;
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(session_id, {
+      expand: ["payment_intent"],
+    });
+
+    const paymentIntent = session.payment_intent;
+    const status = paymentIntent.status;
+    const paymentIntentId = paymentIntent.id;
+    const orderId = session.metadata.order_id;
+
+    if (!orderId) {
+      return res.status(400).json({ error: "Order ID missing in Stripe metadata" });
+    }
+
+    const result = await pool.query(
+      `UPDATE orders 
+       SET payment_intent_id = $1, status = $2 
+       WHERE order_id = $3 
+       RETURNING *`,
+      [paymentIntentId, status, orderId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({ success: true, order: result.rows[0] });
+  } catch (err) {
+    console.error("Payment verification error:", err);
+    res.status(500).json({ error: "Payment verification failed" });
+  }
+});
+
+
+
+
+
+app.get('/orders/:orderId', async (req, res) => {
+  const { orderId } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching order:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 
 app.get("/api/price-estimate", async (req, res) => {
@@ -307,7 +399,7 @@ app.get('/api/print-request/user-history', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
+      `SELECT id, name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
        FROM print_requests
        WHERE email = $1
        ORDER BY created_at DESC`,

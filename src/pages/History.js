@@ -92,7 +92,7 @@ const History = () => {
   const isPdf = (filename) => /\.pdf$/i.test(filename.toLowerCase());
 
   return (
-    <div className="space-y-8">
+    <div id="history" className="space-y-8">
       <div className="text-center space-y-4">
         <h2 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
           Print History
@@ -210,6 +210,9 @@ const History = () => {
               Request Details
             </h2>
             <div className="space-y-2 text-sm">
+              <p>
+                <strong>Name:</strong> {selectedRequest.name}
+              </p>
               <p>
                 <strong>Email:</strong> {selectedRequest.email}
               </p>

@@ -32,140 +32,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// app.post('/create-checkout-session', async (req, res) => {
-//   const { amount, email } = req.body;
-
-//   try {
-//     const session = await stripe.checkout.sessions.create({
-//       payment_method_types: ['card'],
-//       line_items: [{
-//         price_data: {
-//           currency: 'inr',
-//           product_data: {
-//             name: 'Document Print Order',
-//           },
-//           unit_amount: amount,
-//         },
-//         quantity: 1,
-//       }],
-//       mode: 'payment',
-//       customer_email: email,
-//       success_url: 'http://localhost:3000/dashboard',
-//       cancel_url: 'http://localhost:3000/cancel',
-//     });
-
-//     res.json({ sessionId: session.id });
-//   } catch (error) {
-//     console.error("Stripe error:", error.message);
-//     res.status(500).json({ error: error.message });
-//   }
-// });
-
-app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) => {
-  try {
-    const { email } = req.body;
-    const printOptions = JSON.parse(req.body.printOptions);
-    const files = req.files;
-
-    if (!email || !files || files.length === 0) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    const { color, sides, copies, pages, specificPages, comments } = printOptions;
-    if (color === "color" && sides === "double") {
-      return res.status(400).json({ error: "Double-sided color printing not supported." });
-    }
-
-    let totalPages = 0;
-    for (const file of files) {
-      const pages = await getPageCount(file.buffer, file.mimetype);
-      totalPages += pages;
-    }
-
-    const priceQuery = await pool.query("SELECT * FROM prices LIMIT 1");
-    const { single_side_cost, double_side_cost, color_cost } = priceQuery.rows[0];
-
-    let perPageCost = 0;
-    if (color === "color") perPageCost = color_cost;
-    else if (sides === "single") perPageCost = single_side_cost;
-    else if (sides === "double") perPageCost = double_side_cost;
-
-    const totalPrice = totalPages * parseInt(copies) * perPageCost;
-
-    // Upload files to Supabase
-    const uploadedFiles = [];
-    for (const file of files) {
-      const filename = `uploads/${Date.now()}-${file.originalname}`;
-      const { data, error } = await supabase.storage
-        .from("print-files")
-        .upload(filename, file.buffer, {
-          contentType: file.mimetype,
-        });
-
-      if (error) return res.status(500).json({ error: "File upload failed" });
-
-      const publicUrl = `https://${process.env.SUPABASE_URL.replace(
-        "https://",
-        ""
-      )}/storage/v1/object/public/print-files/${data.path}`;
-      uploadedFiles.push(publicUrl);
-    }
-
-    const fileUrlsAsString = uploadedFiles.join(",");
-
-    // Insert with pending payment
-    const insertSQL = `
-      INSERT INTO print_requests
-        (email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
-      VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-      RETURNING id;
-    `;
-    const { rows } = await pool.query(insertSQL, [
-      email,
-      fileUrlsAsString,
-      color,
-      sides,
-      copies,
-      pages,
-      specificPages,
-      comments,
-      totalPrice,
-    ]);
-
-    const printRequestId = rows[0].id;
-
-    // Create Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "inr",
-            product_data: {
-              name: "PrintEase Order",
-            },
-            unit_amount: Math.round(totalPrice * 100), // Convert to paise
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `http://localhost:3000/success?orderId=${printRequestId}`,
-      cancel_url: `http://localhost:3000/cancel`,
-      metadata: {
-        printRequestId: printRequestId.toString(),
-      },
-    });
-
-    res.json({ sessionId: session.id });
-  } catch (err) {
-    console.error("Stripe session creation error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-
 app.get("/api/price-estimate", async (req, res) => {
   try {
     const { color, sides, copies, pages } = req.query;
@@ -307,7 +173,7 @@ app.get('/api/print-request/user-history', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
+      `SELECT id, name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at
        FROM print_requests
        WHERE email = $1
        ORDER BY created_at DESC`,

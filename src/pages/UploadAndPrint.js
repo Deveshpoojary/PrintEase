@@ -301,16 +301,9 @@ const UploadAndPrint = () => {
     try {
       const formData = new FormData();
 
-      files.forEach((file, index) => {
-        console.log(`Appending file ${index + 1}: ${file.name}`);
-        formData.append("files", file);
-      });
-
-      const email = user.primaryEmailAddress.emailAddress;
-      console.log("User email:", email);
-      formData.append("email", email);
-
-      console.log("Print options:", printOptions);
+      files.forEach((file) => formData.append("files", file));
+      formData.append("email", user.primaryEmailAddress.emailAddress);
+      formData.append("name", user.fullName || user.username || "Unknown");
       formData.append("printOptions", JSON.stringify(printOptions));
 
       // Send request to backend to create Stripe session

@@ -1,23 +1,45 @@
 import React, { useEffect, useState } from 'react';
 
-const SUPABASE_PUBLIC_URL = 'https://lyfjzflzrsjgycyovjkm.supabase.co/storage/v1/object/public/print-files/uploads/';
+const SUPABASE_PUBLIC_URL =
+  'https://lyfjzflzrsjgycyovjkm.supabase.co/storage/v1/object/public/print-files/uploads/';
+const BACKEND_URL = 'http://localhost:5000';
 
 const PrintRequests = () => {
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
 
   useEffect(() => {
-    const fetchPrintRequests = async () => {
-      try {
-        const res = await fetch('http://localhost:5000/api/admin/print-requests');
-        const data = await res.json();
-        setRequests(data);
-      } catch (error) {
-        console.error('Error fetching print requests:', error);
-      }
-    };
     fetchPrintRequests();
   }, []);
+
+  const fetchPrintRequests = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/print-requests`);
+      const data = await res.json();
+      setRequests(data);
+    } catch (error) {
+      console.error('Error fetching print requests:', error);
+    }
+  };
+
+  const updateStatus = async (id, status) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/print-requests/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        console.log(`✅ Status updated to: ${status}`);
+        fetchPrintRequests();
+      } else {
+        console.error('❌ Error updating status:', data.error);
+      }
+    } catch (err) {
+      console.error('Error updating status:', err);
+    }
+  };
 
   const parseFileUrls = (file_url) => {
     try {
@@ -41,7 +63,7 @@ const PrintRequests = () => {
   const isPdf = (filename) => /\.pdf$/i.test(filename.toLowerCase());
 
   const getFullUrl = (url) => {
-    return url.startsWith("http") ? url : SUPABASE_PUBLIC_URL + url.trim();
+    return url.startsWith('http') ? url : SUPABASE_PUBLIC_URL + url.trim();
   };
 
   return (
@@ -61,6 +83,24 @@ const PrintRequests = () => {
               {new Date(req.created_at).toLocaleString()}
             </p>
             <p className="font-semibold text-lg text-indigo-700">{req.email}</p>
+            {req.name && (
+              <p className="text-sm text-gray-700">
+                Name: <span className="font-medium">{req.name}</span>
+              </p>
+            )}
+            {req.status && (
+              <p className="text-sm">
+                Status:{' '}
+                <span className="capitalize font-medium text-purple-700">
+                  {req.status}
+                </span>
+              </p>
+            )}
+            {req.price !== undefined && (
+              <p className="text-sm">
+                Cost: <span className="font-medium text-green-700">₹{req.price}</span>
+              </p>
+            )}
             <p className="text-sm mt-2">
               Pages: {req.pages} | Copies: {req.copies}
             </p>
@@ -85,29 +125,69 @@ const PrintRequests = () => {
               Close
             </button>
 
-            <h2 className="text-2xl font-bold text-indigo-700 mb-4">Print Request Details</h2>
+            <h2 className="text-2xl font-bold text-indigo-700 mb-4">
+              Print Request Details
+            </h2>
             <div className="space-y-2 text-sm">
-              <p><strong>Email:</strong> {selectedRequest.email}</p>
-              <p><strong>Pages:</strong> {selectedRequest.pages}</p>
-              <p><strong>Copies:</strong> {selectedRequest.copies}</p>
-              <p><strong>Color:</strong> {selectedRequest.color}</p>
-              <p><strong>Sides:</strong> {selectedRequest.sides}</p>
+              <p>
+                <strong>Email:</strong> {selectedRequest.email}
+              </p>
+              {selectedRequest.name && (
+                <p>
+                  <strong>Name:</strong> {selectedRequest.name}
+                </p>
+              )}
+              {selectedRequest.status && (
+                <p>
+                  <strong>Status:</strong>{' '}
+                  <span className="capitalize">{selectedRequest.status}</span>
+                </p>
+              )}
+              {selectedRequest.price !== undefined && (
+                <p>
+                  <strong>Cost:</strong> ₹{selectedRequest.price}
+                </p>
+              )}
+              <p>
+                <strong>Pages:</strong> {selectedRequest.pages}
+              </p>
+              <p>
+                <strong>Copies:</strong> {selectedRequest.copies}
+              </p>
+              <p>
+                <strong>Color:</strong> {selectedRequest.color}
+              </p>
+              <p>
+                <strong>Sides:</strong> {selectedRequest.sides}
+              </p>
               {selectedRequest.specific_pages && (
-                <p><strong>Specific Pages:</strong> {selectedRequest.specific_pages}</p>
+                <p>
+                  <strong>Specific Pages:</strong> {selectedRequest.specific_pages}
+                </p>
               )}
               {selectedRequest.comments && (
-                <p><strong>Comments:</strong> {selectedRequest.comments}</p>
+                <p>
+                  <strong>Comments:</strong> {selectedRequest.comments}
+                </p>
               )}
-              <p><strong>Date:</strong> {new Date(selectedRequest.created_at).toLocaleString()}</p>
+              <p>
+                <strong>Date:</strong>{' '}
+                {new Date(selectedRequest.created_at).toLocaleString()}
+              </p>
             </div>
 
-            <h3 className="mt-6 mb-2 text-lg font-semibold text-indigo-600">Files:</h3>
+            <h3 className="mt-6 mb-2 text-lg font-semibold text-indigo-600">
+              Files:
+            </h3>
             <div className="space-y-6">
               {parseFileUrls(selectedRequest.file_url).map((file, index) => {
                 const fullUrl = getFullUrl(file);
-                const fileName = fullUrl.split("/").pop();
+                const fileName = fullUrl.split('/').pop();
                 return (
-                  <div key={index} className="border rounded-xl overflow-hidden bg-gray-50">
+                  <div
+                    key={index}
+                    className="border rounded-xl overflow-hidden bg-gray-50"
+                  >
                     <div className="bg-gray-100 px-4 py-2 font-medium text-sm text-gray-800">
                       {fileName}
                     </div>
@@ -116,6 +196,7 @@ const PrintRequests = () => {
                         src={fullUrl}
                         alt={`File ${index}`}
                         className="w-full max-h-[500px] object-contain"
+                        onLoad={() => updateStatus(selectedRequest.id, 'viewed')}
                       />
                     ) : isPdf(fullUrl) ? (
                       <iframe
@@ -125,6 +206,7 @@ const PrintRequests = () => {
                         )}&embedded=true`}
                         className="w-full h-96"
                         frameBorder="0"
+                        onLoad={() => updateStatus(selectedRequest.id, 'viewed')}
                       />
                     ) : (
                       <div className="p-4 text-sm text-red-500">
@@ -134,6 +216,21 @@ const PrintRequests = () => {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => updateStatus(selectedRequest.id, 'printing')}
+                className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600"
+              >
+                Mark as Printing
+              </button>
+              <button
+                onClick={() => updateStatus(selectedRequest.id, 'completed')}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+              >
+                Mark as Completed
+              </button>
             </div>
           </div>
         </div>

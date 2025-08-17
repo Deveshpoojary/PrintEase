@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import PrintRequests from './PrintRequests';
+import BookingSlots from './BookingSlots';
 import AdminUsers from './AdminUsers';
 import AdminSettings from './AdminSettings';
 import { Printer, Users, Settings, LayoutDashboard } from 'lucide-react';
@@ -13,6 +14,7 @@ const AdminPanel = () => {
       case 'dashboard': return <Dashboard />;
       case 'users': return <AdminUsers />;
       case 'settings': return <AdminSettings />;
+      case 'slotBookings': return <BookingSlots />;
       default: return <Dashboard />;
     }
   };
@@ -28,6 +30,9 @@ const AdminPanel = () => {
           </button>
           <button onClick={() => setSection('printRequests')} className={`flex items-center gap-2 p-3 rounded-xl hover:bg-white/10 ${section === 'printRequests' && 'bg-white/10'}`}>
             <Printer className="w-5 h-5" /> Print Requests
+          </button>
+          <button onClick={() => setSection('slotBookings')} className={`flex items-center gap-2 p-3 rounded-xl hover:bg-white/10 ${section === 'printRequests' && 'bg-white/10'}`}>
+            <Printer className="w-5 h-5" /> Slot Bookings
           </button>
           <button onClick={() => setSection('users')} className={`flex items-center gap-2 p-3 rounded-xl hover:bg-white/10 ${section === 'users' && 'bg-white/10'}`}>
             <Users className="w-5 h-5" /> Users

@@ -1,35 +1,92 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User } from 'lucide-react';
+import { useUser } from '@clerk/clerk-react';
+
+const API_BASE = 'http://localhost:5000';
 
 const BookSlot = () => {
+  const { user } = useUser();
+
   const [booking, setBooking] = useState({
     date: '',
     time: '',
-    name: '',
     usn: '',
-    email: '',
     phone: '',
     notes: ''
   });
 
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [remaining, setRemaining] = useState(null);
+  const [capacity, setCapacity] = useState(null);
+  const [otp, setOtp] = useState('');
 
-  const timeSlots = [
-    '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
-  ];
+  const isFormValid = booking.date && booking.time && booking.usn && booking.phone;
 
   const handleInputChange = (e) => {
     setBooking({ ...booking, [e.target.name]: e.target.value });
+    setSuccessMsg('');
+    setErrorMsg('');
   };
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      setRemaining(null);
+      setCapacity(null);
+      setOtp('');
+      if (!booking.date || !booking.time) return;
+      try {
+        const qs = new URLSearchParams({ date: booking.date, time: booking.time }).toString();
+        const res = await fetch(`${API_BASE}/api/slots/availability?${qs}`);
+        const data = await res.json();
+        if (res.ok) {
+          setRemaining(data.remaining);
+          setCapacity(data.capacity);
+        } else {
+          setErrorMsg(data.error || 'Failed to load availability');
+        }
+      } catch {
+        setErrorMsg('Failed to load availability');
+      }
+    };
+    fetchAvailability();
+  }, [booking.date, booking.time]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitted(true);
-    setTimeout(() => setIsSubmitted(false), 3000);
-  };
+    if (!isFormValid) return;
+    setIsSubmitting(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+    setOtp('');
 
-  const isFormValid = booking.date && booking.time && booking.name && booking.email && booking.usn;
+    try {
+      const payload = {
+        ...booking,
+        // inject from Clerk
+        email: user.primaryEmailAddress.emailAddress,
+        name: user.fullName || user.username || 'Unknown',
+      };
+
+      const res = await fetch(`${API_BASE}/api/book-slot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Booking failed');
+
+      setSuccessMsg(`Slot booked! Your check-in OTP is ${data.otp}.`);
+      setOtp(data.otp);
+      setRemaining(data.remaining);
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -71,48 +128,42 @@ const BookSlot = () => {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-800">Select Time</h3>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                {timeSlots.map((slot) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => setBooking({ ...booking, time: slot })}
-                    className={`px-4 py-3 rounded-xl font-medium ${
-                      booking.time === slot
-                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg'
-                        : 'bg-white/60 text-gray-700 hover:bg-white/80 hover:text-gray-800 border border-gray-200'
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
+              <input
+                type="time"
+                name="time"
+                value={booking.time}
+                onChange={handleInputChange}
+                step={600}
+                className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                required
+              />
+              {booking.date && booking.time && (
+                <div className="text-sm">
+                  {remaining === null ? (
+                    <span className="text-gray-500">Checking availability…</span>
+                  ) : remaining > 0 ? (
+                    <span className="text-green-600">
+                      Seats available: {remaining}
+                      {capacity !== null ? ` / ${capacity}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-red-600">This slot is full. Pick another time.</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Contact Info */}
+          {/* Contact Info (USN + Phone only, name/email auto from Clerk) */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl shadow-lg">
                 <User className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-800">Contact Information</h3>
+              <h3 className="text-xl font-semibold text-gray-800">Your Details</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <label className="block text-gray-700 font-medium">Full Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={booking.name}
-                  onChange={handleInputChange}
-                  className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
-                  placeholder="Enter your full name"
-                  required
-                />
-              </div>
-
               <div className="space-y-3">
                 <label className="block text-gray-700 font-medium">USN *</label>
                 <input
@@ -122,19 +173,6 @@ const BookSlot = () => {
                   onChange={handleInputChange}
                   className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
                   placeholder="Enter your USN"
-                  required
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="block text-gray-700 font-medium">Email Address *</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={booking.email}
-                  onChange={handleInputChange}
-                  className="w-full bg-white/60 border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
-                  placeholder="Enter your email"
                   required
                 />
               </div>
@@ -171,16 +209,26 @@ const BookSlot = () => {
           <div className="flex flex-col items-center space-y-4">
             <button
               type="submit"
-              disabled={!isFormValid}
+              disabled={!isFormValid || remaining === 0}
               className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-2xl shadow-lg hover:from-indigo-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
             >
               <Calendar className="w-5 h-5" />
               Book Printing Slot
             </button>
 
-            {isSubmitted && (
+            {successMsg && (
               <div className="px-6 py-3 bg-green-100 text-green-700 border border-green-200 rounded-xl font-medium">
-                Slot booked successfully! You'll receive a confirmation email shortly.
+                {successMsg}
+              </div>
+            )}
+            {otp && (
+              <div className="px-6 py-3 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-mono">
+                Your OTP: <strong>{otp}</strong>
+              </div>
+            )}
+            {errorMsg && (
+              <div className="px-6 py-3 bg-red-100 text-red-700 border border-red-200 rounded-xl font-medium">
+                {errorMsg}
               </div>
             )}
           </div>

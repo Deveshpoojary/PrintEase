@@ -13,6 +13,9 @@ const { getPageCount } = require("./utils/pageCounter");
 const Stripe = require("stripe");
 const crypto = require("crypto");
 const { requireAuth } = require('@clerk/express');
+// Import Cashfree PG SDK
+const { Cashfree, CFEnvironment } = require('cashfree-pg');
+
 
 
 dns.setDefaultResultOrder('ipv4first'); 
@@ -35,6 +38,30 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// PayU configuration
+const PAYU_KEY = process.env.PAYU_KEY || '';
+const PAYU_SALT = process.env.PAYU_SALT || '';
+const PAYU_BASE_URL = process.env.PAYU_BASE_URL || 'https://test.payu.in/_payment';
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || 'http://localhost:5000';
+
+function sha512Hex(input) {
+  return crypto.createHash('sha512').update(input).digest('hex');
+}
+
+// Cashfree configuration
+const CF_APP_ID = process.env.CF_APP_ID;
+const CF_SECRET_KEY = process.env.CF_SECRET_KEY;
+const CF_BASE_URL = process.env.CF_BASE_URL || 'https://sandbox.cashfree.com';
+const CF_CHECKOUT_BASE = process.env.CF_CHECKOUT_BASE || 'https://payments-test.cashfree.com';
+
+
+const cashfree = new Cashfree(
+  CFEnvironment.SANDBOX,   // use PRODUCTION when going live
+  process.env.CF_APP_ID,
+  process.env.CF_SECRET_KEY
+);
+
 
 
 const SLOT_DURATION_MIN = 10;
@@ -50,11 +77,11 @@ function snapToGrid(timeHHMM) {
   return `${hh}:${mm}`;
 }
 
-// Build timestamptz in UTC from date + time (treat input as local)
+// Build timestamptz explicitly in IST (Asia/Kolkata) to avoid server/DB TZ drift
 function buildStartAt(dateStr, timeStr) {
-  // Interpret dateStr as YYYY-MM-DD and timeStr as HH:MM (local), let Postgres handle zone with '::timestamptz'
-  // We send "YYYY-MM-DD HH:MM:00" and rely on server TZ; if you want strict zone, pass timezone explicitly.
-  return `${dateStr} ${timeStr}:00`;
+  // Interpret inputs as local IST and append +05:30 offset so Postgres parses correctly
+  // Example: 2025-01-31 14:20:00+05:30
+  return `${dateStr} ${timeStr}:00+05:30`;
 }
 
 function generateOtp() {
@@ -71,8 +98,7 @@ app.get('/api/slots/availability', async (req, res) => {
     const { date, time } = req.query;
     if (!date || !time) return res.status(400).json({ error: 'date and time are required' });
 
-    const snapped = snapToGrid(time);
-    const startAt = buildStartAt(date, snapped);
+    const startAt = buildStartAt(date, time);
 
     const { rows } = await pool.query(
       `
@@ -115,8 +141,11 @@ app.post('/api/book-slot',  async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const snapped = snapToGrid(time);
-    const startAt = buildStartAt(date, snapped);
+    const startAt = buildStartAt(date, time);
+    // Prevent booking past times
+    if (Date.parse(startAt) < Date.now()) {
+      return res.status(400).json({ error: 'Selected time is in the past. Please choose a future time.' });
+    }
 
     await client.query('BEGIN');
 
@@ -270,7 +299,7 @@ app.get('/api/admin/bookings', async (req, res) => {
       FROM bookings b
       JOIN slots s ON s.id = b.slot_id
       ${where}
-      ORDER BY s.start_at ASC, b.created_at ASC
+      ORDER BY s.start_at DESC, b.created_at DESC
       `,
       params
     );
@@ -412,9 +441,15 @@ app.get("/api/price-estimate", async (req, res) => {
 //   }
 // });
 
+function generateOrderId() {
+  const uniqueId = crypto.randomBytes(8).toString("hex");
+  return `ORD-${uniqueId}`;
+}
+
 
 // Create Stripe session (NO DB insert here)
-app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) => {
+// Initialize Cashfree payment (replaces PayU)
+app.post("/api/cashfree/init", uploadd.array("files"), async (req, res) => {
   try {
     const { email, name } = req.body;
     const printOptions = JSON.parse(req.body.printOptions || "{}");
@@ -422,6 +457,10 @@ app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) 
 
     if (!email || !name || !files || files.length === 0) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (!CF_APP_ID || !CF_SECRET_KEY) {
+      return res.status(500).json({ error: "Payment gateway not configured (missing CF_APP_ID/CF_SECRET_KEY)." });
     }
 
     const { color, sides, copies, pages, specificPages, comments } = printOptions;
@@ -432,7 +471,6 @@ app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) 
     let totalPages = 0;
     for (const file of files) {
       const pageCount = await getPageCount(file.buffer, file.mimetype);
-
       if (specificPages && specificPages.trim() !== "") {
         const ranges = specificPages.split(",").map(r => r.trim());
         let count = 0;
@@ -475,121 +513,246 @@ app.post("/api/create-stripe-session", uploadd.array("files"), async (req, res) 
 
     const fileUrlsAsString = uploadedFiles.join(",");
     const orderId = `ORD-${Date.now()}`;
+    
+    const amount = Number(totalPrice.toFixed(2));
+    const customerId = String(email || name || orderId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const customer_details = {
+      customer_id: customerId,
+      customer_email: email,
+      customer_phone: (req.body.phone && String(req.body.phone).trim()) || '9999999999',
+      customer_name: name,
+    };
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [{
-        price_data: {
-          currency: "inr",
-          product_data: { name: "PrintEase Order" },
-          unit_amount: Math.round(totalPrice * 100),
-        },
-        quantity: 1,
-      }],
-      mode: "payment",
-      success_url: `http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}&orderId=${orderId}`,
-      cancel_url: `http://localhost:3000/cancel`,
-      metadata: {
+    // Create a pending print_request now; mark completed on webhook
+    const insertPrintReqSQL = `
+      INSERT INTO print_requests
+        (name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, status, created_at)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'processing',NOW())
+      RETURNING id;
+    `;
+    const prInsert = await pool.query(insertPrintReqSQL, [
         name,
         email,
-        fileUrls: fileUrlsAsString || "",
+      fileUrlsAsString,
         color,
         sides,
         copies,
-        pages: totalPages.toString(),
-        specificPages: specificPages || "",
-        comments: comments || "",
-        price: totalPrice.toString(),
-        order_id: orderId,
-      },
-    });
+      totalPages,
+      specificPages,
+      comments,
+      amount
+    ]);
+    const printRequestId = prInsert.rows[0].id;
 
-    res.json({ sessionId: session.id });
+    // Create Cashfree order using PG SDK
+     const orderParams = {
+       order_amount: amount,
+       order_currency: 'INR',
+       order_id: orderId,
+       customer_details,
+       order_note: 'PrintEase Order',
+       order_meta: {
+         return_url: `${FRONTEND_BASE_URL}/success?orderId=${orderId}`,
+         notify_url: `${BACKEND_BASE_URL}/api/cashfree/webhook`,
+        //  payment_methods: {}
+       }
+     };
+     
+     try {
+       // Create order using Cashfree PG SDK
+       const response = await cashfree.PGCreateOrder(orderParams);
+      
+       console.log("Cashfree response:", response.data);
+       const cfJson = response.data;
+       
+       // Process the order creation
+       await processOrderCreation(cfJson, orderId, printRequestId, res);
+     } catch (error) {
+       console.error('Cashfree order creation error:', error);
+       if (error.response && error.response.data) {
+         return res.status(500).json({ error: error.response.data.message || 'Cashfree order creation failed' });
+       }
+       return res.status(500).json({ error: error.message || 'Cashfree order creation failed' });
+     }
+       
+     // This function will be called after successful order creation
+      async function processOrderCreation(cfJson, orderId, printRequestId, res) {
+        try {
+          console.log('Processing order creation with orderId:', orderId);
+          
+          // Save order pending and link to print_request
+          await pool.query(
+            `INSERT INTO orders (order_id, print_request_id, amount, status, user_name, user_email, payment_session_id, created_at)
+             VALUES ($1,$2,$3,'pending',$4,$5,$6,NOW())
+             ON CONFLICT (order_id) DO NOTHING`,
+            [orderId, printRequestId, amount, name, email, cfJson.payment_session_id || null]
+          );
+
+          // Always return both payment_link and session_id
+          return res.status(200).json({
+            orderId: orderId,
+            payment_session_id: cfJson.payment_session_id,
+            payment_link: cfJson.payment_link || null
+          });
+        } catch (err) {
+          console.error('Database error when saving order:', err);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+      }
   } catch (err) {
-    console.error("Stripe session creation error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Cashfree init error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 
 // Verify payment and INSERT into DB
-app.get("/api/verify-payment", async (req, res) => {
-  const { session_id } = req.query;
+// PayU success callback (frontend will redirect here and then call this endpoint)
+// app.post('/api/payu/verify', express.urlencoded({ extended: true }), async (req, res) => {
+//   try {
+//     const {
+//       status,
+//       txnid,
+//       amount,
+//       productinfo,
+//       firstname,
+//       email,
+//       mihpayid,
+//       hash,
+//       udf1,
+//       udf2,
+//     } = req.body;
 
+//     // Verify hash: salt|status|||||||||udf2|udf1|email|firstname|productinfo|amount|txnid|key
+//     const reverseSeq = `${PAYU_SALT}|${status}|||||||||${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${PAYU_KEY}`;
+//     const serverHash = sha512Hex(reverseSeq).toLowerCase();
+//     if (serverHash !== String(hash).toLowerCase()) {
+//       return res.status(400).json({ error: 'Hash verification failed' });
+//     }
+
+//     if (status !== 'success') {
+//       return res.status(400).json({ error: 'Payment not completed' });
+//     }
+
+//     const md = JSON.parse(udf2 || '{}');
+//     const totalPrice = parseFloat(amount);
+
+//     // Upsert order by order_id (= txnid)
+//     const existingOrder = await pool.query(
+//       'SELECT * FROM orders WHERE order_id = $1',
+//       [txnid]
+//     );
+
+//     let printRequestId;
+//     if (existingOrder.rows.length === 0) {
+//     const insertPrintReqSQL = `
+//       INSERT INTO print_requests
+//         (name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
+//       VALUES
+//         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+//       RETURNING id;
+//     `;
+//     const { rows } = await pool.query(insertPrintReqSQL, [
+//         firstname,
+//         email,
+//         udf1,
+//       md.color,
+//       md.sides,
+//       md.copies,
+//       md.pages,
+//       md.specificPages,
+//       md.comments,
+//       totalPrice,
+//     ]);
+//       printRequestId = rows[0].id;
+
+//     const insertOrderSQL = `
+//       INSERT INTO orders 
+//         (print_request_id, user_name, user_email, amount, status, payment_session_id, payment_intent_id, order_id, created_at)
+//       VALUES 
+//         ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+//     `;
+//     await pool.query(insertOrderSQL, [
+//       printRequestId,
+//         firstname,
+//         email,
+//       totalPrice,
+//         'completed',
+//         txnid,
+//         mihpayid,
+//         txnid,
+//       ]);
+//     } else {
+//       await pool.query(
+//         'UPDATE orders SET status = $1, payment_session_id = $2, payment_intent_id = $3 WHERE order_id = $4',
+//         ['completed', txnid, mihpayid, txnid]
+//       );
+//     }
+
+//     res.json({ success: true, message: 'Payment verified & data inserted.' });
+//   } catch (err) {
+//     console.error('PayU verify error:', err);
+//     res.status(500).json({ error: 'Payment verification failed' });
+//   }
+// });
+
+// Cashfree webhook endpoint to handle payment notifications
+
+app.post('/api/cashfree/webhook', express.json(), async (req, res) => {
   try {
-    const session = await stripe.checkout.sessions.retrieve(session_id);
-
-    if (session.payment_status !== "paid") {
-      return res.status(400).json({ error: "Payment not completed" });
+    console.log('Cashfree webhook received:', JSON.stringify(req.body, null, 2));
+    
+    // Handle different webhook formats
+    let orderId, paymentStatus, paymentId;
+    
+    if (req.body.data) {
+      // New webhook format
+      orderId = req.body.data.order?.order_id;
+      paymentStatus = req.body.data.payment?.payment_status;
+      paymentId = req.body.data.payment?.cf_payment_id;
+    } else {
+      // Direct format
+      orderId = req.body.order_id;
+      paymentStatus = req.body.payment_status;
+      paymentId = req.body.cf_payment_id;
     }
-
-    const md = session.metadata;
-    if (!md || !md.fileUrls) {
-      return res.status(400).json({ error: "Missing order metadata" });
+    
+    if (!orderId) {
+      console.error('No order_id found in webhook');
+      return res.status(400).json({ error: 'Invalid webhook data' });
     }
-
-    const totalPrice = parseFloat(md.price);
-
-    // 1️⃣ Check if order already exists
+    
+    console.log(`Processing webhook for order: ${orderId}, status: ${paymentStatus}`);
+    
+    // Determine final status
+    let finalStatus = 'failed';
+    if (paymentStatus === 'SUCCESS' || paymentStatus === 'PAID') {
+      finalStatus = 'completed';
+    }
+    
+    // Update order in database
     const existingOrder = await pool.query(
-      "SELECT * FROM orders WHERE order_id = $1",
-      [md.order_id]
+      'SELECT * FROM orders WHERE order_id = $1',
+      [orderId]
     );
-
-    if (existingOrder.rows.length > 0) {
-      // If already exists, just update status
-      await pool.query(
-        "UPDATE orders SET status = 'completed', payment_session_id = $1, payment_intent_id = $2 WHERE order_id = $3",
-        [session.id, session.payment_intent, md.order_id]
-      );
-      return res.json({ success: true, message: "Order already exists, status updated." });
+    
+    if (existingOrder.rows.length === 0) {
+      console.error('Order not found for webhook:', orderId);
+      return res.status(404).json({ error: 'Order not found' });
     }
-
-    // 2️⃣ Insert into print_requests
-    const insertPrintReqSQL = `
-      INSERT INTO print_requests
-        (name, email, file_url, color, sides, copies, pages, specific_pages, comments, price, created_at)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-      RETURNING id;
-    `;
-    const { rows } = await pool.query(insertPrintReqSQL, [
-      md.name,
-      md.email,
-      md.fileUrls,
-      md.color,
-      md.sides,
-      md.copies,
-      md.pages,
-      md.specificPages,
-      md.comments,
-      totalPrice,
-    ]);
-
-    const printRequestId = rows[0].id;
-
-    // 3️⃣ Insert into orders
-    const insertOrderSQL = `
-      INSERT INTO orders 
-        (print_request_id, user_name, user_email, amount, status, payment_session_id, payment_intent_id, order_id, created_at)
-      VALUES 
-        ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-    `;
-    await pool.query(insertOrderSQL, [
-      printRequestId,
-      md.name,
-      md.email,
-      totalPrice,
-      "completed",
-      session.id,
-      session.payment_intent,
-      md.order_id,
-    ]);
-
-    res.json({ success: true, message: "Payment verified & data inserted." });
-  } catch (err) {
-    console.error("Payment verification error:", err);
-    res.status(500).json({ error: "Payment verification failed" });
+    
+    // Update order status with payment details
+    await pool.query(
+      'UPDATE orders SET status = $1, payment_intent_id = $2 WHERE order_id = $3',
+      [finalStatus, paymentId || null, orderId]
+    );
+    
+    console.log(`Order ${orderId} updated to ${finalStatus}`);
+    res.status(200).json({ status: 'OK' });
+  } catch (error) {
+    console.error('Cashfree webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
@@ -597,11 +760,17 @@ app.get("/api/verify-payment", async (req, res) => {
 
 
 // Get order details by order ID
-app.get('/orders/:orderId', async (req, res) => {
+app.get('/api/orders/:orderId', async (req, res) => {
   const { orderId } = req.params;
 
   try {
-    const result = await pool.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+    const result = await pool.query(
+      `SELECT o.*, pr.status as print_status 
+       FROM orders o 
+       LEFT JOIN print_requests pr ON o.print_request_id = pr.id 
+       WHERE o.order_id = $1`, 
+      [orderId]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found' });
@@ -611,6 +780,24 @@ app.get('/orders/:orderId', async (req, res) => {
   } catch (err) {
     console.error('Error fetching order:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update order status
+app.put('/api/orders/:orderId', async (req, res) => {
+  const { orderId } = req.params;
+  const { status } = req.body;
+
+  try {
+    await pool.query(
+      'UPDATE orders SET status = $1 WHERE order_id = $2',
+      [status, orderId]
+    );
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating order:', err);
+    res.status(500).json({ error: 'Failed to update order' });
   }
 });
 
@@ -651,7 +838,7 @@ app.get('/api/print-request/user-history', async (req, res) => {
    FROM bookings b
    JOIN slots s ON b.slot_id = s.id
    WHERE b.email = $1
-   ORDER BY b.created_at DESC`,
+   ORDER BY s.start_at DESC, b.created_at DESC `,
   [email]
 );
 
@@ -802,3 +989,4 @@ app.post("/clerk/beforeUserCreated", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+

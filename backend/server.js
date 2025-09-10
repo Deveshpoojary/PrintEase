@@ -33,6 +33,15 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000, // 10 seconds
 });
 
+pool.on("connect", () => {
+  console.log("✅ Connected to PostgreSQL (Render)");
+});
+
+pool.on("error", (err) => {
+  console.error("❌ Unexpected error on idle PostgreSQL client", err);
+  process.exit(-1);
+});
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY

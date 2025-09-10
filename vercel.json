@@ -1,7 +1,15 @@
 {
-  "functions": {
-    "api/**/*.js": {
-      "external": ["cashfree-pg"]
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/server.js",
+      "use": "@vercel/node"
     }
-  }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "backend/server.js"
+    }
+  ]
 }

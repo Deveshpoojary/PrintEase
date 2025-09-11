@@ -21,7 +21,9 @@ const { Cashfree, CFEnvironment } = require('cashfree-pg');
 dns.setDefaultResultOrder('ipv4first'); 
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://mite-printease.vercel.app/']
+}));
 app.use(express.json());
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY); // from .env stripe secret key

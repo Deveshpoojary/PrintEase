@@ -30,6 +30,9 @@ const upload = multer(); // Use memory storage
 
 const pool = new Pool({
   connectionString: process.env.SUPABASE_DB_URL,
+  ssl: {
+    rejectUnauthorized: false, // needed for Supabase on Render
+  },
   connectionTimeoutMillis: 10000, // 10 seconds
 });
 

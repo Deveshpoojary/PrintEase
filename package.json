@@ -2,7 +2,6 @@
   "name": "print-ease",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["backend"],
   "dependencies": {
     "@cashfreepayments/cashfree-js": "^1.0.5",
     "@clerk/clerk-react": "^5.31.9",

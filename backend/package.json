@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "check": "dir node_modules\\cashfree-pg\\dist",
     "start": "node server.js",

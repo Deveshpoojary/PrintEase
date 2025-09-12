@@ -44,7 +44,7 @@ const pool = new Pool({
 attachDatabasePool(pool);
 
 pool.on("connect", () => {
-  console.log("✅ Connected to PostgreSQL (Render)");
+  console.log("✅ Connected to PostgreSQL (Supabase)");
 });
 
 pool.on("error", (err) => {

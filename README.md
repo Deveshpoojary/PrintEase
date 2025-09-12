@@ -1,70 +1,84 @@
-# Getting Started with Create React App
+# 🖨️ PrintEase  
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**PrintEase** is a **Fullstack Project using Vite + React, Node.js, Express, and PostgreSQL (Supabase)**.  
+It is a smart **College Xerox Shop Management System** designed to reduce waiting time and streamline the printing process. Students can upload documents, book slots, and track their requests, while the admin manages everything from a centralized dashboard.  
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 📛 Tech Badges  
 
-### `npm start`
+![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=fff&style=for-the-badge)  
+![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=000&style=for-the-badge)  
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-38B2AC?logo=tailwindcss&logoColor=fff&style=for-the-badge)  
+![Node.js](https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=fff&style=for-the-badge)  
+![Express.js](https://img.shields.io/badge/Express.js-000000?logo=express&logoColor=fff&style=for-the-badge)  
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=fff&style=for-the-badge)  
+![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?logo=supabase&logoColor=000&style=for-the-badge)  
+![Firebase](https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=000&style=for-the-badge)  
+![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=fff&style=for-the-badge)  
+![Render](https://img.shields.io/badge/Render-46E3B7?logo=render&logoColor=000&style=for-the-badge)  
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 🚀 Features  
 
-### `npm test`
+### 🔹 Student Side
+- 📂 Upload PDF documents for printing  
+- ⚡ Quick OTP-based authentication  
+- 🖨️ Choose print options (pages, copies, black & white / color)  
+- 📊 Track order history  
+- 📅 Book printing slots in advance  
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### 🔹 Admin Side
+- 📋 View and manage all print requests  
+- 🗑️ Delete completed/invalid requests  
+- 📬 Receive messages and feedback  
+- 📊 Manage user data with filters & sorting  
+- ⏰ Slot management for better queue handling  
+- 📈 Dashboard for analytics  
 
-### `npm run build`
+### 🔹 Common Features
+- 🔐 Secure login system with Firebase authentication  
+- 🌐 Cloud-hosted backend (Node.js + Express + PostgreSQL)  
+- ☁️ Database powered by Supabase (PostgreSQL)  
+- 🎨 Responsive UI with React + TailwindCSS  
+- ⚡ Optimized performance with Vercel & Render deployment  
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 🛠️ Tech Stack  
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- **Frontend:** Vite + React, Tailwind CSS  
+- **Backend:** Node.js, Express.js  
+- **Database:** PostgreSQL (Supabase)  
+- **Authentication:** Firebase  
+- **Hosting:**  
+  - Frontend → Vercel  
+  - Backend → Render / Vercel  
+- **Other Tools:** Nodemailer, CORS, dotenv  
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## 📂 Project Structure  
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```bash
+PrintEase/
+│── backend/                # Express server (APIs + DB connection)
+│   ├── server.js           # Main backend entry point
+│   ├── routes/             # API routes (admin, user, bookings, etc.)
+│   ├── controllers/        # Business logic
+│   ├── models/             # Database queries
+│   ├── config/             # Database & environment configs
+│   ├── package.json        # Backend dependencies
+│
+│── frontend/               # React + Vite (student & admin UI)
+│   ├── src/
+│   │   ├── components/     # Reusable UI components
+│   │   ├── pages/          # All app pages (Dashboard, Admin, Login, etc.)
+│   │   ├── utils/          # Helper functions
+│   │   ├── App.jsx         # Main React entry
+│   │   └── main.jsx        # Vite entry
+│   ├── index.html          # Root HTML
+│   ├── package.json        # Frontend dependencies
+│
+│── README.md               # Documentation

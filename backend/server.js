@@ -30,13 +30,15 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY); // from .env stripe secret
 
 const upload = multer(); // Use memory storage
 
-const pool = new Pool({
-  connectionString: process.env.SUPABASE_DB_URL,
-  ssl: {
-    rejectUnauthorized: false, // needed for Supabase on Render
-  },
-  connectionTimeoutMillis: 10000, // 10 seconds
-});
+pool = new Pool({
+    host: process.env.SUPABASE_DB_HOST,
+    port: process.env.SUPABASE_DB_PORT || 5432,
+    user: process.env.SUPABASE_DB_USER,
+    password: process.env.SUPABASE_DB_PASSWORD,
+    database: process.env.SUPABASE_DB_NAME,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+  });
 
 pool.on("connect", () => {
   console.log("✅ Connected to PostgreSQL (Render)");
@@ -999,6 +1001,10 @@ app.post("/clerk/beforeUserCreated", (req, res) => {
     });
   }
   res.status(200).json({ message: "User creation allowed" });
+});
+
+app.get("/", (req, res) => {
+  res.send("PrintEase Backend is running...");
 });
 
 const PORT = process.env.PORT || 5000;

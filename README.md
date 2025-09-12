@@ -54,8 +54,8 @@ It is a smart **College Xerox Shop Management System** designed to reduce waitin
 - **Authentication:** Firebase  
 - **Hosting:**  
   - Frontend → Vercel  
-  - Backend → Render / Vercel  
-- **Other Tools:** Nodemailer, CORS, dotenv  
+  - Backend → Vercel  
+- **Other Tools:**  CORS, dotenv, bcrypt, jsonwebtoken, multer
 
 ---
 
@@ -65,17 +65,14 @@ It is a smart **College Xerox Shop Management System** designed to reduce waitin
 PrintEase/
 │── backend/                # Express server (APIs + DB connection)
 │   ├── server.js           # Main backend entry point
-│   ├── routes/             # API routes (admin, user, bookings, etc.)
-│   ├── controllers/        # Business logic
-│   ├── models/             # Database queries
-│   ├── config/             # Database & environment configs
+│   ├── utils/              # Helper functions
 │   ├── package.json        # Backend dependencies
 │
 │── frontend/               # React + Vite (student & admin UI)
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # All app pages (Dashboard, Admin, Login, etc.)
-│   │   ├── utils/          # Helper functions
+│   │   ├── pages/          # All app pages (Dashboard, Login, etc.)
+│   │   ├── admin/          # Admin-specific pages (Dashboard, Users, Orders, etc.)
 │   │   ├── App.jsx         # Main React entry
 │   │   └── main.jsx        # Vite entry
 │   ├── index.html          # Root HTML

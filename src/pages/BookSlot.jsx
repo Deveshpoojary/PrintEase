@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 
-const API_BASE = 'http://localhost:5000';
+const API_BASE = 'https://print-ease-backend-gold.vercel.app';
 
 const BookSlot = () => {
   const { user } = useUser();

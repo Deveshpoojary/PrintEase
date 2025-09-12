@@ -84,7 +84,7 @@ const UploadAndPrint = () => {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/price-estimate?${query}`
+        `https://print-ease-backend-gold.vercel.app/api/price-estimate?${query}`
       );
       const data = await res.json();
       if (res.ok) {
@@ -207,7 +207,7 @@ const UploadAndPrint = () => {
       });
 
       const res = await fetch(
-        `http://localhost:5000/api/price-estimate?${query.toString()}`
+        `https://print-ease-backend-gold.vercel.app/api/price-estimate?${query.toString()}`
       );
       const data = await res.json();
 
@@ -258,7 +258,7 @@ const UploadAndPrint = () => {
   //     console.log("Print options:", printOptions);
   //     formData.append("printOptions", JSON.stringify(printOptions));
 
-  //     const res = await fetch("http://localhost:5000/api/print-request", {
+  //     const res = await fetch("https://print-ease-backend-gold.vercel.app/api/print-request", {
   //       method: "POST",
   //       body: formData,
   //     });
@@ -306,7 +306,7 @@ const UploadAndPrint = () => {
       formData.append("name", user.fullName || user.username || "Unknown");
       formData.append("printOptions", JSON.stringify(printOptions));
 
-      const res = await fetch("http://localhost:5000/api/cashfree/init", {
+      const res = await fetch("https://print-ease-backend-gold.vercel.app/api/cashfree/init", {
         method: "POST",
         body: formData,
       });

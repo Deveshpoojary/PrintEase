@@ -8,7 +8,7 @@ const AdminSettings = () => {
   });
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/admin/settings')
+    fetch('https://print-ease-backend-gold.vercel.app/api/admin/settings')
       .then(res => res.json())
       .then(data => setForm(data));
   }, []);
@@ -19,7 +19,7 @@ const AdminSettings = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = await fetch('http://localhost:5000/api/admin/settings', {
+    const res = await fetch('https://print-ease-backend-gold.vercel.app/api/admin/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),

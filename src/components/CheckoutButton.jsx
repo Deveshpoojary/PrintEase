@@ -6,7 +6,7 @@ const stripePromise = loadStripe("pk_test_51RpUezGpLMJ2tSshsofGbkLrh9nHjZeyjwnpj
 
 const CheckoutButton = () => {
   const handleCheckout = async () => {
-    const response = await fetch("http://localhost:5000/create-checkout-session", {
+    const response = await fetch("https://print-ease-backend-gold.vercel.app/create-checkout-session", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

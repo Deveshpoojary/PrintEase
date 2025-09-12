@@ -19,13 +19,13 @@ const SuccessPage = () => {
         }
 
         // Auto-complete order in database
-        await fetch(`http://localhost:5000/api/orders/${orderId}`, {
+        await fetch(`https://print-ease-backend-gold.vercel.app/api/orders/${orderId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'completed' })
         });
 
-        const orderRes = await fetch(`http://localhost:5000/api/orders/${orderId}`);
+        const orderRes = await fetch(`https://print-ease-backend-gold.vercel.app/api/orders/${orderId}`);
         const orderData = await orderRes.json();
         if (!orderRes.ok) throw new Error(orderData.error || "Order fetch failed");
 

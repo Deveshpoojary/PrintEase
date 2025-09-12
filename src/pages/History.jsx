@@ -24,7 +24,7 @@ const History = () => {
       if (!user) return;
       try {
         const res = await fetch(
-          `http://localhost:5000/api/print-request/user-history?email=${user.primaryEmailAddress.emailAddress}`
+          `https://print-ease-backend-gold.vercel.app/api/print-request/user-history?email=${user.primaryEmailAddress.emailAddress}`
         );
         const data = await res.json();
         setHistoryData(data.printHistory || []);

@@ -12,7 +12,7 @@ const BookingSlots = () => {
 
   const fetchBookings = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/admin/bookings");
+      const res = await fetch("https://print-ease-backend-gold.vercel.app/api/admin/bookings");
       const data = await res.json();
       setBookings(data);
     } catch (err) {
@@ -40,7 +40,7 @@ const BookingSlots = () => {
   const handleComplete = async (id, otp) => {
     if (!otp) return alert("Enter OTP");
     try {
-      const res = await fetch("http://localhost:5000/api/complete", {
+      const res = await fetch("https://print-ease-backend-gold.vercel.app/api/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ otp }),

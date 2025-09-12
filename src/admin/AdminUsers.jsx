@@ -5,7 +5,7 @@ const AdminUsers = () => {
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/admin/users')
+    fetch('https://print-ease-backend-gold.vercel.app/api/admin/users')
       .then(res => res.json())
       .then(data => setUsers(data))
       .catch(err => console.error('Error fetching users:', err));

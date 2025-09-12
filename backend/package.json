@@ -15,6 +15,7 @@
     "@cashfreepayments/cashfree-js": "^1.0.5",
     "@clerk/express": "^1.7.21",
     "@supabase/supabase-js": "^2.50.0",
+    "@vercel/functions": "^3.1.0",
     "axios": "^1.9.0",
     "body-parser": "^2.2.0",
     "cashfree-pg": "^5.0.8",

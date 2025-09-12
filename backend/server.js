@@ -15,6 +15,8 @@ const crypto = require("crypto");
 const { requireAuth } = require('@clerk/express');
 // Import Cashfree PG SDK
 const { Cashfree, CFEnvironment } = require('cashfree-pg');
+const { attachDatabasePool } = require("@vercel/functions");
+
 
 
 
@@ -37,6 +39,9 @@ const pool = new Pool({
   },
   connectionTimeoutMillis: 10000, // 10 seconds
 });
+
+// Attach the pool to ensure idle connections close before suspension
+attachDatabasePool(pool);
 
 pool.on("connect", () => {
   console.log("✅ Connected to PostgreSQL (Render)");

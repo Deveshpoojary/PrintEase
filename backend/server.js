@@ -24,7 +24,10 @@ dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://mite-printease.vercel.app/']
+  origin: ['https://mite-printease.vercel.app', 'http://localhost:5173'],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+
 }));
 app.use(express.json());
 

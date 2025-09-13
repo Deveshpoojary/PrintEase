@@ -1,22 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { Calendar, Clock, User, CheckCircle, Search } from "lucide-react";
+import { SkeletonCard } from "../components/SkeletonLoader";
 
 const BookingSlots = () => {
   const [bookings, setBookings] = useState([]);
   const [search, setSearch] = useState("");
   const [otpInputs, setOtpInputs] = useState({}); // track otp per booking
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchBookings();
   }, []);
 
   const fetchBookings = async () => {
+    setLoading(true);
     try {
       const res = await fetch("https://print-ease-backend-gold.vercel.app/api/admin/bookings");
       const data = await res.json();
       setBookings(data);
     } catch (err) {
       console.error("Failed to fetch bookings:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,7 +88,10 @@ const BookingSlots = () => {
       </div>
 
       <div className="grid gap-4">
-        {filteredBookings.map((booking) => (
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+        ) : (
+          filteredBookings.map((booking) => (
           <div
             key={booking.booking_id}
             className="p-5 bg-white/80 rounded-xl shadow space-y-3"
@@ -153,7 +161,8 @@ const BookingSlots = () => {
               </div>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

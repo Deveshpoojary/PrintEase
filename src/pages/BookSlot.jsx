@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 
 const API_BASE = 'https://print-ease-backend-gold.vercel.app';
 
@@ -22,6 +23,7 @@ const BookSlot = () => {
   const [capacity, setCapacity] = useState(null);
   const [otp, setOtp] = useState('');
   const [timeError, setTimeError] = useState('');
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
 
   const isFormValid = booking.date && booking.time && booking.usn && booking.phone;
 
@@ -59,6 +61,7 @@ const BookSlot = () => {
       setOtp('');
       if (!booking.date || !booking.time) return;
       if (isPastSelection(booking.date, booking.time)) return; // skip if past
+      setCheckingAvailability(true);
       try {
         const qs = new URLSearchParams({ date: booking.date, time: booking.time }).toString();
         const res = await fetch(`${API_BASE}/api/slots/availability?${qs}`);
@@ -71,6 +74,8 @@ const BookSlot = () => {
         }
       } catch {
         setErrorMsg('Failed to load availability');
+      } finally {
+        setCheckingAvailability(false);
       }
     };
     fetchAvailability();
@@ -178,7 +183,9 @@ const BookSlot = () => {
               )}
               {booking.date && booking.time && (
                 <div className="text-sm">
-                  {remaining === null ? (
+                  {checkingAvailability ? (
+                    <SkeletonLoader className="h-4 w-32 bg-gray-300 rounded shimmer" />
+                  ) : remaining === null ? (
                     <span className="text-gray-500">Checking availability…</span>
                   ) : remaining > 0 ? (
                     <span className="text-green-600">

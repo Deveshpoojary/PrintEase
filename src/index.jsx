@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import { ClerkProvider } from "@clerk/clerk-react";
+import { Analytics } from "@vercel/analytics/react";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY; // Replace this with your actual Clerk publishable key
 
@@ -11,11 +12,10 @@ root.render(
   <React.StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl='/'>
       <App />
+      <Analytics />
     </ClerkProvider>
   </React.StrictMode>,
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+// Vercel Analytics is now enabled for tracking page views and user interactions
 

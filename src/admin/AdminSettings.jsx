@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { SkeletonForm } from '../components/SkeletonLoader';
 
 const AdminSettings = () => {
   const [form, setForm] = useState({
@@ -6,11 +7,19 @@ const AdminSettings = () => {
     double_side_cost: '',
     color_cost: ''
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch('https://print-ease-backend-gold.vercel.app/api/admin/settings')
       .then(res => res.json())
-      .then(data => setForm(data));
+      .then(data => {
+        setForm(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error fetching settings:', err);
+        setLoading(false);
+      });
   }, []);
 
   const handleChange = (e) => {
@@ -28,6 +37,14 @@ const AdminSettings = () => {
     const data = await res.json();
     alert(data.message);
   };
+
+  if (loading) {
+    return (
+      <div className="p-8 max-w-xl mx-auto">
+        <SkeletonForm />
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-xl mx-auto">

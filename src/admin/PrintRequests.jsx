@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { SkeletonCard } from '../components/SkeletonLoader';
 
 const SUPABASE_PUBLIC_URL = import.meta.env.VITE_SUPABASE_PUBLIC_URL;
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -7,18 +8,22 @@ console.log(BACKEND_URL);
 const PrintRequests = () => {
   const [requests, setRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchPrintRequests();
   }, []);
 
   const fetchPrintRequests = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/admin/print-requests`);
       const data = await res.json();
       setRequests(data);
     } catch (error) {
       console.error('Error fetching print requests:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -82,7 +87,10 @@ const PrintRequests = () => {
       </h1>
 
       <div className="grid gap-6 grid-cols-1">
-        {requests.map((req) => (
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
+        ) : (
+          requests.map((req) => (
           <div
             key={req.id}
             onClick={() => setSelectedRequest(req)}
@@ -119,7 +127,8 @@ const PrintRequests = () => {
             </p>
             <p className="text-xs mt-1 italic text-purple-500">Click to view more</p>
           </div>
-        ))}
+          ))
+        )}
       </div>
 
       {selectedRequest && (
